@@ -175,26 +175,38 @@ class _StageState extends State<_Stage> {
     // the eye-dot inside the lenses is the one element positioned
     // continuously every frame from the damped-gaze spring, never
     // frame-snapped (non-negotiable #6).
-    final bodyOffset = Offset(_gaze.x.clamp(-1.0, 1.0) * 10,
-        _gaze.y.clamp(-1.0, 1.0) * 10);
+    //
+    // Sized off the available viewport rather than a fixed constant so it
+    // fills most of the screen regardless of device — a desk pet you can
+    // barely see at a glance has failed at being a desk pet.
     return Stack(
       children: [
         Center(
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 400),
-            opacity: _faceHere ? 1.0 : 0.3,
-            child: SizedBox(
-              width: 168,
-              height: 168,
-              child: CustomPaint(
-                painter: RobotPainter(
-                  blink: _blink,
-                  eyeX: _gaze.x.clamp(-1.0, 1.0),
-                  eyeY: _gaze.y.clamp(-1.0, 1.0),
-                  bodyOffset: bodyOffset,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final robotSize =
+                  constraints.biggest.shortestSide * 0.92;
+              final bodyOffset = Offset(
+                _gaze.x.clamp(-1.0, 1.0) * robotSize * 0.03,
+                _gaze.y.clamp(-1.0, 1.0) * robotSize * 0.03,
+              );
+              return AnimatedOpacity(
+                duration: const Duration(milliseconds: 400),
+                opacity: _faceHere ? 1.0 : 0.3,
+                child: SizedBox(
+                  width: robotSize,
+                  height: robotSize,
+                  child: CustomPaint(
+                    painter: RobotPainter(
+                      blink: _blink,
+                      eyeX: _gaze.x.clamp(-1.0, 1.0),
+                      eyeY: _gaze.y.clamp(-1.0, 1.0),
+                      bodyOffset: bodyOffset,
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
         Positioned(
