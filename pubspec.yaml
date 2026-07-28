@@ -38,6 +38,18 @@ dependencies:
   # Keeps the app process and CPU alive while the screen shows the pet.
   wakelock_plus: ^1.2.8
 
+  # Camera feed (never rendered; image stream only).
+  camera: ^0.11.0+2
+
+  # Offline face detection.
+  google_mlkit_face_detection: ^0.12.0
+
+  # Runtime permission request for the front camera.
+  permission_handler: ^11.3.1
+
+  # Persist the tuning panel values + the (much later) two-value carve-out.
+  shared_preferences: ^2.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

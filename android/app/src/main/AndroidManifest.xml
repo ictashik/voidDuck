@@ -1,4 +1,22 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Camera access only. INTERNET must never appear (CLAUDE.md non-negotiable #1). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <!-- google_mlkit_face_detection's underlying com.google.mlkit:face-detection AAR pulls in
+         play-services-mlkit-face-detection + Firebase's datatransport-cct, which declare these
+         two permissions for telemetry/model-delivery plumbing we never use — face detection
+         itself runs fully on-device. Force-strip them so they can't leak into the merged
+         manifest (CLAUDE.md non-negotiable #1). -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <!-- camera_android_camerax declares these for its video/photo-capture APIs. We only
+         ever use the raw image stream (never record audio or save media to disk), and
+         CLAUDE.md requires camera access ONLY, so strip them. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
     <application
         android:label="voidduck"
         android:name="${applicationName}"

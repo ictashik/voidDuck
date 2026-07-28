@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../debug/debug_bus.dart';
+import 'tuning_panel.dart';
 
 /// Skeleton debug overlay required by every build (CLAUDE.md "Debug overlay").
 ///
@@ -27,6 +28,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
   bool _open = false;
   int _taps = 0;
   Timer? _resetTimer;
+  int _tab = 0; // 0 = Debug, 1 = Tuning
 
   static const double _tapZone = 64.0;
   static const Duration _multiTapWindow = Duration(milliseconds: 500);
@@ -76,55 +78,72 @@ class _DebugOverlayState extends State<DebugOverlay> {
   }
 
   Widget _buildPanel(BuildContext context) {
+    final width = _tab == 0 ? 280.0 : 340.0;
+    final maxH = MediaQuery.of(context).size.height * 0.8;
     return Positioned(
       left: 8,
       top: 8,
-      width: 280,
-      child: Material(
-        color: const Color(0x80000000),
-        borderRadius: BorderRadius.circular(6),
-        child: AnimatedBuilder(
-          animation: DebugBus.instance,
-          builder: (context, _) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        'VOIDDUCK DEBUG',
-                        style: TextStyle(
-                          color: Color(0xFFE0E0E0),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                        ),
+      width: width,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: Material(
+          color: const Color(0x80000000),
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    _tabButton(0, 'DEBUG'),
+                    const SizedBox(width: 8),
+                    _tabButton(1, 'TUNING'),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => setState(() => _open = false),
+                      child: const Padding(
+                        padding: EdgeInsets.all(2),
+                        child: Icon(Icons.close, size: 12, color: Color(0xCCFFFFFF)),
                       ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () => setState(() => _open = false),
-                        child: const Padding(
-                          padding: EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.close,
-                            size: 12,
-                            color: Color(0xCCFFFFFF),
+                    ),
+                  ],
+                ),
+                const Divider(height: 6, color: Color(0x44FFFFFF)),
+                Flexible(
+                  child: _tab == 0
+                      ? AnimatedBuilder(
+                          animation: DebugBus.instance,
+                          builder: (context, _) => SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: _sections(),
+                            ),
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Divider(height: 1, color: Color(0x44FFFFFF)),
-                  const SizedBox(height: 4),
-                  ..._sections(),
-                ],
-              ),
-            );
-          },
+                        )
+                      : const SingleChildScrollView(child: TuningPanel()),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tabButton(int i, String label) {
+    final active = _tab == i;
+    return GestureDetector(
+      onTap: () => setState(() => _tab = i),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: active ? const Color(0xFFFFFFFF) : const Color(0x66FFFFFF),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
         ),
       ),
     );
@@ -137,6 +156,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
       _section('PetState', [
         _row('PetState', 'PetState'),
         _row('Seconds in state', 'StateSeconds'),
+        _row('Face lock', 'FaceLock'),
       ]),
       _section('ML Kit (raw)', [
         _row('Face center', 'FaceCenter'),
@@ -151,6 +171,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
         _row('LookY smooth / raw', 'LookY'),
       ]),
       _section('Camera', [
+        _row('Lens', 'CameraLens'),
         _row('Achieved fps', 'AchievedFps'),
         _row('Target fps', 'TargetFps'),
       ]),

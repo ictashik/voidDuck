@@ -3,9 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'app.dart';
+import 'tuning/tuning.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  _bootstrap();
+}
+
+Future<void> _bootstrap() async {
+  await Tuning.init();
   _applySystemChrome();
   _holdWakelock();
   runApp(const VoidDuckApp());
