@@ -49,6 +49,7 @@ dependencies:
 
   # Persist the tuning panel values + the (much later) two-value carve-out.
   shared_preferences: ^2.3.2
+  screen_brightness: ^2.1.11
 
 dev_dependencies:
   flutter_test:

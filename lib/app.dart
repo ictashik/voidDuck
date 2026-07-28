@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'debug/debug_bus.dart';
+import 'state/pet_state_controller.dart';
 import 'tuning/tuning.dart';
 import 'vision/camera_service.dart';
 import 'vision/face_tracker.dart';
@@ -44,6 +45,7 @@ enum _PermissionState { unknown, denied, granted, permanently }
 class _StageState extends State<_Stage> {
   late final CameraService _camera;
   late final FaceTracker _tracker;
+  late final PetStateController _petState;
   StreamSubscription<FaceSnapshot>? _sub;
   _PermissionState _perm = _PermissionState.unknown;
   String? _error;
@@ -56,6 +58,7 @@ class _StageState extends State<_Stage> {
     super.initState();
     _camera = CameraService();
     _tracker = FaceTracker(_camera);
+    _petState = PetStateController(setTargetFps: _camera.setTargetFps);
     _bootstrap();
   }
 
@@ -94,9 +97,10 @@ class _StageState extends State<_Stage> {
   Future<void> _startPipeline() async {
     try {
       await _camera.start();
-      _camera.setTargetFps(Tuning.get('target_fps_tracking'));
       _tracker.start();
+      _petState.start();
       _sub = _tracker.snapshots.listen((s) {
+        _petState.onFacePresence(s.stableFacePresent);
         final justAcquired = s.stableFacePresent && !_faceHere;
         final smoothing = Tuning.get('gaze_smoothing').clamp(0.0, 0.98);
         if (justAcquired) {
@@ -130,6 +134,7 @@ class _StageState extends State<_Stage> {
   @override
   void dispose() {
     _sub?.cancel();
+    _petState.stop();
     _tracker.stop();
     _camera.dispose();
     super.dispose();
