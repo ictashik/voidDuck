@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'debug/debug_bus.dart';
 import 'tuning/tuning.dart';
 import 'vision/camera_service.dart';
 import 'vision/face_tracker.dart';
@@ -47,6 +48,8 @@ class _StageState extends State<_Stage> {
   _PermissionState _perm = _PermissionState.unknown;
   String? _error;
   bool _faceHere = false;
+  double _smoothX = 0;
+  double _smoothY = 0;
 
   @override
   void initState() {
@@ -94,7 +97,23 @@ class _StageState extends State<_Stage> {
       _camera.setTargetFps(Tuning.get('target_fps_tracking'));
       _tracker.start();
       _sub = _tracker.snapshots.listen((s) {
-        if (s.stableFacePresent != _faceHere) {
+        final justAcquired = s.stableFacePresent && !_faceHere;
+        final smoothing = Tuning.get('gaze_smoothing').clamp(0.0, 0.98);
+        if (justAcquired) {
+          // Snap straight to the raw position on first lock — trailing in
+          // from wherever the circle idled would read as a stray swoop, not
+          // as "found you."
+          _smoothX = s.lookX;
+          _smoothY = s.lookY;
+        } else if (s.stableFacePresent) {
+          _smoothX += (s.lookX - _smoothX) * (1 - smoothing);
+          _smoothY += (s.lookY - _smoothY) * (1 - smoothing);
+        }
+        DebugBus.instance.put('LookX',
+            '${_smoothX.toStringAsFixed(2)} (raw ${s.lookX.toStringAsFixed(2)})');
+        DebugBus.instance.put('LookY',
+            '${_smoothY.toStringAsFixed(2)} (raw ${s.lookY.toStringAsFixed(2)})');
+        if (s.stableFacePresent != _faceHere || s.stableFacePresent) {
           setState(() => _faceHere = s.stableFacePresent);
         }
       });
@@ -133,25 +152,40 @@ class _StageState extends State<_Stage> {
         errorText: _error,
       );
     }
-    // Stage 2 body: a black stage with a tiny "FACE: yes/no" indicator so the
-    // human has one visual confirmation that the pipeline is alive — the
-    // overlay carries the actual numbers.
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            _faceHere ? Icons.visibility : Icons.visibility_off_outlined,
-            color: Color(_faceHere ? 0x66FFFFFF : 0x22FFFFFF),
-            size: 28,
+    // Stage 3 body: a plain circle standing in for the duck, following the
+    // face via the smoothed LookX/LookY. Proves the pipeline end to end
+    // before any Rive art exists (spec build order, Stage 3).
+    return Stack(
+      children: [
+        AnimatedAlign(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          alignment: Alignment(
+            _smoothX.clamp(-1.0, 1.0),
+            _smoothY.clamp(-1.0, 1.0),
           ),
-          const SizedBox(height: 6),
-          Text(
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 400),
+            opacity: _faceHere ? 1.0 : 0.15,
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFEDEDED),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 8,
+          bottom: 8,
+          child: Text(
             'face ${_faceHere ? "found" : "searching"}',
             style: const TextStyle(color: Color(0x33FFFFFF), fontSize: 11),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
