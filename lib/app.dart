@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'debug/debug_bus.dart';
+import 'gaze/gaze_controller.dart';
 import 'state/pet_state_controller.dart';
-import 'tuning/tuning.dart';
 import 'vision/camera_service.dart';
 import 'vision/face_tracker.dart';
 import 'ui/debug_overlay.dart';
@@ -46,12 +46,15 @@ class _StageState extends State<_Stage> {
   late final CameraService _camera;
   late final FaceTracker _tracker;
   late final PetStateController _petState;
+  final GazeController _gaze = GazeController();
   StreamSubscription<FaceSnapshot>? _sub;
+  Timer? _gazeTicker;
   _PermissionState _perm = _PermissionState.unknown;
   String? _error;
   bool _faceHere = false;
-  double _smoothX = 0;
-  double _smoothY = 0;
+  static const _gazeTick = Duration(milliseconds: 16);
+  double _lastRawX = 0;
+  double _lastRawY = 0;
 
   @override
   void initState() {
@@ -102,24 +105,22 @@ class _StageState extends State<_Stage> {
       _sub = _tracker.snapshots.listen((s) {
         _petState.onFacePresence(s.stableFacePresent);
         final justAcquired = s.stableFacePresent && !_faceHere;
-        final smoothing = Tuning.get('gaze_smoothing').clamp(0.0, 0.98);
-        if (justAcquired) {
-          // Snap straight to the raw position on first lock — trailing in
-          // from wherever the circle idled would read as a stray swoop, not
-          // as "found you."
-          _smoothX = s.lookX;
-          _smoothY = s.lookY;
-        } else if (s.stableFacePresent) {
-          _smoothX += (s.lookX - _smoothX) * (1 - smoothing);
-          _smoothY += (s.lookY - _smoothY) * (1 - smoothing);
+        _gaze.onSnapshot(s, justAcquired: justAcquired);
+        if (s.stableFacePresent) {
+          _lastRawX = s.lookX;
+          _lastRawY = s.lookY;
         }
-        DebugBus.instance.put('LookX',
-            '${_smoothX.toStringAsFixed(2)} (raw ${s.lookX.toStringAsFixed(2)})');
-        DebugBus.instance.put('LookY',
-            '${_smoothY.toStringAsFixed(2)} (raw ${s.lookY.toStringAsFixed(2)})');
-        if (s.stableFacePresent != _faceHere || s.stableFacePresent) {
+        if (s.stableFacePresent != _faceHere) {
           setState(() => _faceHere = s.stableFacePresent);
         }
+      });
+      _gazeTicker = Timer.periodic(_gazeTick, (_) {
+        _gaze.tick(_gazeTick.inMicroseconds / 1e6);
+        DebugBus.instance.put('LookX',
+            '${_gaze.x.toStringAsFixed(2)} (raw ${_lastRawX.toStringAsFixed(2)})');
+        DebugBus.instance.put('LookY',
+            '${_gaze.y.toStringAsFixed(2)} (raw ${_lastRawY.toStringAsFixed(2)})');
+        setState(() {});
       });
     } catch (e, st) {
       FlutterError.reportError(FlutterErrorDetails(
@@ -134,6 +135,7 @@ class _StageState extends State<_Stage> {
   @override
   void dispose() {
     _sub?.cancel();
+    _gazeTicker?.cancel();
     _petState.stop();
     _tracker.stop();
     _camera.dispose();
@@ -158,16 +160,16 @@ class _StageState extends State<_Stage> {
       );
     }
     // Stage 3 body: a plain circle standing in for the duck, following the
-    // face via the smoothed LookX/LookY. Proves the pipeline end to end
-    // before any Rive art exists (spec build order, Stage 3).
+    // face via the damped-gaze spring. Proves the pipeline end to end before
+    // any Rive art exists (spec build order, Stage 3). No AnimatedAlign here
+    // — the spring in GazeController already produces smooth motion at its
+    // own tick rate; layering another animation on top would double-smooth.
     return Stack(
       children: [
-        AnimatedAlign(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
+        Align(
           alignment: Alignment(
-            _smoothX.clamp(-1.0, 1.0),
-            _smoothY.clamp(-1.0, 1.0),
+            _gaze.x.clamp(-1.0, 1.0),
+            _gaze.y.clamp(-1.0, 1.0),
           ),
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 400),

@@ -81,8 +81,10 @@ class Tuning {
     'debounce_face_gained': TuningSpec('Face-gained frames', 1, 30, 3, step: 1),
     'debounce_startle': TuningSpec('Startle frames', 1, 30, 3, step: 1),
 
-    // --- Gaze smoothing ---
-    'gaze_smoothing': TuningSpec('Gaze smoothing', 0, 1, 0.35),
+    // --- Damped gaze (aliveness layer) ---
+    'layer_damped_gaze': TuningSpec('Damped gaze on', 0, 1, 1, step: 1),
+    'gaze_spring_stiffness': TuningSpec('Spring stiffness', 10, 300, 90),
+    'gaze_spring_damping': TuningSpec('Spring damping', 1, 40, 12),
 
     // --- Smile hysteresis (CLAUDE.md spec) ---
     'smile_on': TuningSpec('Smile on prob', 0, 1, 0.7),
@@ -143,7 +145,9 @@ class Tuning {
     'debounce_face_lost': 4,
     'debounce_face_gained': 3,
     'debounce_startle': 3,
-    'gaze_smoothing': 0.35,
+    'layer_damped_gaze': 1,
+    'gaze_spring_stiffness': 90,
+    'gaze_spring_damping': 12,
     'smile_on': 0.7,
     'smile_off': 0.5,
     'eye_closed': 0.3,
