@@ -6,7 +6,7 @@ An offline digital desk pet. An 8-bit pixel-art robot — wearing glasses/lenses
 
 It has no utility. It is a companion toy. **Every design decision should be judged by "does this make it feel more alive," not "is this efficient."**
 
-Full technical spec: `VoidDuck_Specification_v2.md`. Read it before your first change and treat it as authoritative for architecture. This file governs *how we work together*.
+Full technical spec: `VoidDuck_Specification_v3.md`. Read it before your first change and treat it as authoritative for architecture. This file governs *how we work together*.
 
 ---
 
