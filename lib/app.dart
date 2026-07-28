@@ -5,7 +5,9 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'debug/debug_bus.dart';
 import 'gaze/gaze_controller.dart';
+import 'render/pixel_robot.dart';
 import 'state/pet_state_controller.dart';
+import 'tuning/tuning.dart';
 import 'vision/camera_service.dart';
 import 'vision/face_tracker.dart';
 import 'ui/debug_overlay.dart';
@@ -52,6 +54,7 @@ class _StageState extends State<_Stage> {
   _PermissionState _perm = _PermissionState.unknown;
   String? _error;
   bool _faceHere = false;
+  bool _blink = false;
   static const _gazeTick = Duration(milliseconds: 16);
   double _lastRawX = 0;
   double _lastRawY = 0;
@@ -110,8 +113,16 @@ class _StageState extends State<_Stage> {
           _lastRawX = s.lookX;
           _lastRawY = s.lookY;
         }
-        if (s.stableFacePresent != _faceHere) {
-          setState(() => _faceHere = s.stableFacePresent);
+        final eyeClosed = Tuning.get('eye_closed');
+        final blink = s.stableFacePresent &&
+            (s.leftEyeOpen < eyeClosed || s.rightEyeOpen < eyeClosed);
+        DebugBus.instance.put('SpriteFrame',
+            'body: rest, lens: ${blink ? "closed (blink)" : "open"}');
+        if (s.stableFacePresent != _faceHere || blink != _blink) {
+          setState(() {
+            _faceHere = s.stableFacePresent;
+            _blink = blink;
+          });
         }
       });
       _gazeTicker = Timer.periodic(_gazeTick, (_) {
@@ -159,27 +170,29 @@ class _StageState extends State<_Stage> {
         errorText: _error,
       );
     }
-    // Stage 3 body: a plain circle standing in for the duck, following the
-    // face via the damped-gaze spring. Proves the pipeline end to end before
-    // any Rive art exists (spec build order, Stage 3). No AnimatedAlign here
-    // — the spring in GazeController already produces smooth motion at its
-    // own tick rate; layering another animation on top would double-smooth.
+    // Stage 5 body: the pixel-art robot (CLAUDE.md "Rendering Approach").
+    // Body/glasses are a static code-defined grid painted by RobotPainter;
+    // the eye-dot inside the lenses is the one element positioned
+    // continuously every frame from the damped-gaze spring, never
+    // frame-snapped (non-negotiable #6).
+    final bodyOffset = Offset(_gaze.x.clamp(-1.0, 1.0) * 10,
+        _gaze.y.clamp(-1.0, 1.0) * 10);
     return Stack(
       children: [
-        Align(
-          alignment: Alignment(
-            _gaze.x.clamp(-1.0, 1.0),
-            _gaze.y.clamp(-1.0, 1.0),
-          ),
+        Center(
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 400),
-            opacity: _faceHere ? 1.0 : 0.15,
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFEDEDED),
+            opacity: _faceHere ? 1.0 : 0.3,
+            child: SizedBox(
+              width: 168,
+              height: 168,
+              child: CustomPaint(
+                painter: RobotPainter(
+                  blink: _blink,
+                  eyeX: _gaze.x.clamp(-1.0, 1.0),
+                  eyeY: _gaze.y.clamp(-1.0, 1.0),
+                  bodyOffset: bodyOffset,
+                ),
               ),
             ),
           ),
