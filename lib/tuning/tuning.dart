@@ -139,6 +139,12 @@ class Tuning {
     // --- Notice latency (reacquisition) ---
     'notice_latency_min_ms': TuningSpec('Notice latency min ms', 0, 3000, 200, step: 10),
     'notice_latency_max_ms': TuningSpec('Notice latency max ms', 0, 3000, 1500, step: 10),
+
+    // --- Lap/total timers (ambient ring + star field, aliveness layer) ---
+    'layer_lap_timers': TuningSpec('Lap/total timers on', 0, 1, 1, step: 1),
+    'lap_ring_minutes': TuningSpec('Lap ring minutes', 1, 120, 25),
+    'star_minutes_per_star': TuningSpec('Star minutes/star', 1, 120, 20),
+    'star_max_count': TuningSpec('Star max count', 10, 500, 120, step: 1),
   };
 
   /// Suggested defaults. MUST stay in sync with [specs].
@@ -188,6 +194,10 @@ class Tuning {
     'rare_event_chance': 0.0033,
     'notice_latency_min_ms': 200,
     'notice_latency_max_ms': 1500,
+    'layer_lap_timers': 1,
+    'lap_ring_minutes': 25,
+    'star_minutes_per_star': 20,
+    'star_max_count': 120,
   };
 }
 

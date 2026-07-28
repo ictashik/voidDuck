@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'app.dart';
+import 'state/pet_memory.dart';
 import 'tuning/tuning.dart';
 
 void main() {
@@ -12,6 +13,7 @@ void main() {
 
 Future<void> _bootstrap() async {
   await Tuning.init();
+  await PetMemory.init();
   _applySystemChrome();
   _holdWakelock();
   runApp(const VoidDuckApp());

@@ -4,6 +4,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 
 import '../debug/debug_bus.dart';
 import '../tuning/tuning.dart';
+import 'pet_memory.dart';
 import 'pet_state.dart';
 
 /// The single mediator between ML Kit presence and both the display and the
@@ -29,20 +30,33 @@ class PetStateController {
   bool _stablePresent = false;
   Timer? _ticker;
 
+  // Lap/total timers. lapSeconds resets on every Waking transition;
+  // totalSeconds is cumulative across the app's lifetime and persisted
+  // (CLAUDE.md's persistence carve-out, now three values).
+  double _lapSeconds = 0;
+  double _totalSeconds = 0;
+  DateTime _lastPersistAt = DateTime.now();
+  static const _persistInterval = Duration(seconds: 30);
+
   final List<String> _animLog = [];
 
   PetState get state => _state;
   double get brightness => _brightness;
+  double get lapSeconds => _lapSeconds;
+  double get totalSeconds => _totalSeconds;
 
   void start() {
+    _totalSeconds = PetMemory.totalSeconds;
     setTargetFps(_targetFpsFor(_state));
     _publishDebug();
     _ticker = Timer.periodic(_tickInterval, (_) => _tick());
   }
 
   void stop() {
+    if (_ticker == null) return; // start() was never called — nothing to flush
     _ticker?.cancel();
     _ticker = null;
+    _persistTotal();
   }
 
   /// Called every time a new (debounced) presence reading arrives.
@@ -67,6 +81,15 @@ class PetStateController {
 
   void _tick() {
     _secondsInState += _tickSeconds;
+
+    // lapSeconds/totalSeconds only accrue in the "present-ish" states.
+    if (_state == PetState.tracking || _state == PetState.idle) {
+      _lapSeconds += _tickSeconds;
+      _totalSeconds += _tickSeconds;
+    }
+    if (DateTime.now().difference(_lastPersistAt) >= _persistInterval) {
+      _persistTotal();
+    }
 
     if (!_stablePresent) {
       _absenceSeconds += _tickSeconds;
@@ -107,8 +130,15 @@ class PetStateController {
     _secondsInState = 0;
     setTargetFps(_targetFpsFor(next));
     if (next == PetState.waking) {
+      _lapSeconds = 0;
       _logAnim('wake (absence ${_absenceSeconds.toStringAsFixed(0)}s)');
     }
+    _persistTotal();
+  }
+
+  void _persistTotal() {
+    _lastPersistAt = DateTime.now();
+    PetMemory.totalSeconds = _totalSeconds;
   }
 
   double _targetFpsFor(PetState s) {
@@ -169,5 +199,17 @@ class PetStateController {
     DebugBus.instance.put('PetState', _state.name);
     DebugBus.instance.put('StateSeconds', _secondsInState.toStringAsFixed(1));
     DebugBus.instance.put('Brightness', _brightness.toStringAsFixed(2));
+    DebugBus.instance.put('LapSeconds', _formatHms(_lapSeconds));
+    DebugBus.instance.put('TotalSeconds', _formatHms(_totalSeconds));
+  }
+
+  static String _formatHms(double seconds) {
+    final total = seconds.floor();
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    return '${h.toString().padLeft(2, '0')}:'
+        '${m.toString().padLeft(2, '0')}:'
+        '${s.toString().padLeft(2, '0')}';
   }
 }

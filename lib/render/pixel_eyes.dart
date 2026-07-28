@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Eyelid states for one socket (CLAUDE.md "Rendering Approach"). `wide` is
@@ -64,6 +66,8 @@ class EyePairPainter extends CustomPainter {
     this.pairRotation = 0,
     this.pairScale = 1.0,
     this.pairOffset = Offset.zero,
+    this.lapRingProgress = 0,
+    this.lapRingPulse = 0,
   });
 
   final EyelidState leftState;
@@ -82,6 +86,16 @@ class EyePairPainter extends CustomPainter {
 
   /// Small translate for gaze-follow nudge / ambient jitter / breathing bob.
   final Offset pairOffset;
+
+  /// 0..1 fraction of the current lap-ring reference duration elapsed
+  /// (wraps every reference duration — see lap_ring_minutes in the tuning
+  /// panel); drawn as a thin clockwise arc around each socket.
+  final double lapRingProgress;
+
+  /// 0..1 pulse intensity, briefly non-zero right after the ring wraps —
+  /// a small flash so long sessions still read as dynamic instead of the
+  /// ring just sitting maxed out.
+  final double lapRingPulse;
 
   static const double _gapCells = 4.0;
 
@@ -110,8 +124,31 @@ class EyePairPainter extends CustomPainter {
 
     _drawSocket(canvas, leftOrigin, cell, leftState);
     _drawSocket(canvas, rightOrigin, cell, rightState);
+    _drawLapRing(canvas, leftOrigin, cell);
+    _drawLapRing(canvas, rightOrigin, cell);
 
     canvas.restore();
+  }
+
+  void _drawLapRing(Canvas canvas, Offset origin, double cell) {
+    final socketCenter = Offset(
+      origin.dx + socketCols / 2 * cell,
+      origin.dy + socketRows / 2 * cell,
+    );
+    // Sit just outside the socket outline (roughly a 3-cell radius) rather
+    // than on top of it.
+    final ringRect = Rect.fromCircle(center: socketCenter, radius: cell * 3.4);
+    final baseOpacity = 0.35 + lapRingPulse * 0.5;
+    final strokeWidth = cell * (0.12 + lapRingPulse * 0.10);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = strokeWidth
+      ..color = Color(0xFF7FE7FF).withValues(alpha: baseOpacity);
+    const startAngle = -math.pi / 2; // 12 o'clock
+    final sweep = 2 * math.pi * lapRingProgress;
+    if (sweep <= 0) return;
+    canvas.drawArc(ringRect, startAngle, sweep, false, paint);
   }
 
   void _drawSocket(
@@ -161,5 +198,7 @@ class EyePairPainter extends CustomPainter {
       old.pupilY != pupilY ||
       old.pairRotation != pairRotation ||
       old.pairScale != pairScale ||
-      old.pairOffset != pairOffset;
+      old.pairOffset != pairOffset ||
+      old.lapRingProgress != lapRingProgress ||
+      old.lapRingPulse != lapRingPulse;
 }

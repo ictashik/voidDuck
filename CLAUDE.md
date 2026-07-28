@@ -6,7 +6,7 @@ An offline digital desk pet. A pair of pixel-art eyes floating on a pitch-black 
 
 It has no utility. It is a companion toy. **Every design decision should be judged by "does this make it feel more alive," not "is this efficient."**
 
-Full technical spec: `VoidDuck_Specification_v4.md`. Read it before your first change and treat it as authoritative for architecture. This file governs *how we work together*.
+Full technical spec: `VoidDuck_Specification_v5.md`. Read it before your first change and treat it as authoritative for architecture. This file governs *how we work together*.
 
 ---
 
@@ -89,6 +89,7 @@ Hidden behind a triple-tap in the top-left corner. Semi-transparent, small, dism
 - Current pupil/highlight-dot position, raw vs. spring-smoothed
 - Interest/attention meter value, current mood scalar
 - Last 5 triggered animations with timestamps
+- `lapSeconds` and `totalSeconds`, as HH:MM:SS
 
 This overlay is how the human tells you *why* something looks wrong instead of just *that* it looks wrong. When behavior is mysterious, add to this overlay before you add speculative fixes.
 
@@ -106,6 +107,7 @@ Also behind the debug gesture, on a second tab. Every magic number in the codeba
 - Stare-break frequency range
 - Interest decay rate
 - Ambient quirk interval range
+- Lap-ring reference duration, star-field seed rate (minutes per star) and max star count
 
 Add a "copy current values" button that dumps them as a Dart snippet the human can paste to you. Then tuning becomes a conversation instead of a build queue.
 
@@ -165,7 +167,7 @@ Violating any of these is a build-breaking bug, not a preference:
 
 ### The one persistence carve-out
 
-Circadian mood and absence-scaled greetings need state across restarts. Permitted storage is **exactly two values**: a last-seen-face timestamp, and a mood scalar. Nothing else. No counts of faces, no session logs, no expression history. If you think you need to persist a third thing, ask first — this boundary is deliberate and the human owns it, not you.
+Circadian mood, absence-scaled greetings, and the lifetime total-time counter need state across restarts. Permitted storage is **exactly three values**: a last-seen-face timestamp, a mood scalar, and `totalSeconds` (a monotonically increasing count of cumulative Tracking/Idle presence time, in seconds). Nothing else. No counts of faces, no session logs, no expression history, no timestamped history of any kind — `totalSeconds` is a single running total, not a log. If you think you need to persist a fourth thing, ask first — this boundary is deliberate and the human owns it, not you.
 
 ---
 
@@ -180,7 +182,8 @@ Checkpoint after each. Don't run ahead — each stage needs device confirmation 
 5. **Pixel rendering** — replace the placeholder circle with the eye pair: code-defined pixel-art eye-socket grids with eyelid-frame states (open/half/closed/squint/wide), pair-level transforms for tilt/proximity/breathing/listen, and the continuously spring-driven pupil dot layered on top inside each socket.
 6. **Aliveness layers** — add one at a time, each independently toggleable, each with its own test cycle.
 7. **Signature moments.**
-8. **Soak test** — leave it running overnight. Check morning-after thermals, battery, memory, whether it still wakes correctly. This stage is not optional; a desk pet that dies after six hours has failed at its only job.
+8. **Lap/total timers** — lapSeconds (since the last Waking, in-memory only) and totalSeconds (lifetime, persisted) tracked off `PetState`; encoded ambiently as a lap ring around each eye socket and a slowly-seeded background star field, with exact HH:MM:SS values available in the debug overlay. Independently toggleable in the debug panel like the other aliveness layers — this reads PetState, it doesn't drive it.
+9. **Soak test** — leave it running overnight. Check morning-after thermals, battery, memory, whether it still wakes correctly. This stage is not optional; a desk pet that dies after six hours has failed at its only job.
 
 ---
 

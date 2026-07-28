@@ -158,6 +158,10 @@ class _DebugOverlayState extends State<DebugOverlay> {
         _row('Seconds in state', 'StateSeconds'),
         _row('Face lock', 'FaceLock'),
       ]),
+      _section('Timers', [
+        _row('Lap (HH:MM:SS)', 'LapSeconds'),
+        _row('Total (HH:MM:SS)', 'TotalSeconds'),
+      ]),
       _section('ML Kit (raw)', [
         _row('Face center', 'FaceCenter'),
         _row('Face size', 'FaceSize'),

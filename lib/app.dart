@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'debug/debug_bus.dart';
 import 'gaze/gaze_controller.dart';
 import 'render/pixel_eyes.dart';
+import 'render/star_field.dart';
 import 'state/pet_state.dart';
 import 'state/pet_state_controller.dart';
 import 'tuning/tuning.dart';
@@ -69,6 +70,8 @@ class _StageState extends State<_Stage> {
   double _tiltRad = 0;
   double _proxScale = 1.0;
   double _breathePhase = 0;
+  int _lastRingCycle = 0;
+  DateTime? _ringPulseAt;
 
   @override
   void initState() {
@@ -158,6 +161,7 @@ class _StageState extends State<_Stage> {
         _tickTilt(dt);
         _tickBreathing(dt);
         _tickProximityEase(dt);
+        _tickLapRingCycle();
         DebugBus.instance.put('LookX',
             '${_gaze.x.toStringAsFixed(2)} (raw ${_lastRawX.toStringAsFixed(2)})');
         DebugBus.instance.put('LookY',
@@ -230,6 +234,47 @@ class _StageState extends State<_Stage> {
     }
   }
 
+  /// Detects each time lapSeconds crosses another multiple of the lap-ring
+  /// reference duration, so the ring can flash instead of just sitting
+  /// maxed out on long sessions.
+  void _tickLapRingCycle() {
+    final refS = Tuning.get('lap_ring_minutes') * 60;
+    if (refS <= 0) return;
+    final cycle = (_petState.lapSeconds / refS).floor();
+    if (cycle != _lastRingCycle) {
+      _lastRingCycle = cycle;
+      _ringPulseAt = DateTime.now();
+    }
+  }
+
+  double get _lapRingProgress {
+    if (!_lapTimersEnabled) return 0;
+    final refS = Tuning.get('lap_ring_minutes') * 60;
+    if (refS <= 0) return 0;
+    return (_petState.lapSeconds % refS) / refS;
+  }
+
+  double get _lapRingPulse {
+    if (!_lapTimersEnabled) return 0;
+    final at = _ringPulseAt;
+    if (at == null) return 0;
+    const pulseDuration = Duration(milliseconds: 350);
+    final elapsed = DateTime.now().difference(at).inMilliseconds;
+    if (elapsed >= pulseDuration.inMilliseconds) return 0;
+    return 1 - (elapsed / pulseDuration.inMilliseconds);
+  }
+
+  bool get _lapTimersEnabled => Tuning.get('layer_lap_timers') >= 0.5;
+
+  int get _starCount {
+    if (!_lapTimersEnabled) return 0;
+    final minutesPerStar = Tuning.get('star_minutes_per_star');
+    if (minutesPerStar <= 0) return 0;
+    final maxCount = Tuning.get('star_max_count').round();
+    final count = (_petState.totalSeconds / 60 / minutesPerStar).floor();
+    return count.clamp(0, maxCount);
+  }
+
   EyelidState _resolveEyelidState() {
     if (_petState.state == PetState.waking) return EyelidState.wide;
     if (_blink) return EyelidState.closed;
@@ -280,6 +325,13 @@ class _StageState extends State<_Stage> {
     final eyelidState = _resolveEyelidState();
     return Stack(
       children: [
+        // Total-time star field: dim, behind, and beneath everything else
+        // so it never competes with the eyes as the focal point.
+        Positioned.fill(
+          child: CustomPaint(
+            painter: StarFieldPainter(starCount: _starCount),
+          ),
+        ),
         Center(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -303,6 +355,8 @@ class _StageState extends State<_Stage> {
                       pairRotation: _tiltRad,
                       pairScale: pairScale,
                       pairOffset: pairOffset,
+                      lapRingProgress: _lapRingProgress,
+                      lapRingPulse: _lapRingPulse,
                     ),
                   ),
                 ),
