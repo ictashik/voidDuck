@@ -97,6 +97,16 @@ class Tuning {
     'prox_startle_on': TuningSpec('Startle box > %', 0, 1, 0.55),
     'prox_startle_off': TuningSpec('Startle box < %', 0, 1, 0.4),
     'startle_cooldown_s': TuningSpec('Startle cooldown s', 0, 10, 2),
+    'startle_dilate_scale': TuningSpec('Startle dilate scale', 1.0, 1.5, 1.15),
+    'startle_ease_rate': TuningSpec('Startle ease /s', 1, 20, 6),
+
+    // --- Head tilt -> eye-pair rotation ---
+    'tilt_max_deg': TuningSpec('Max tilt deg', 5, 45, 25),
+    'tilt_smoothing': TuningSpec('Tilt smoothing', 0, 1, 0.25),
+
+    // --- Idle breathing pulse (always-on ambient, ties to no detection state) ---
+    'breathe_amplitude': TuningSpec('Breathe amplitude', 0, 0.1, 0.02),
+    'breathe_rate_hz': TuningSpec('Breathe rate Hz', 0.05, 1.0, 0.25),
 
     // --- PetState timeouts (Section 6 of spec) ---
     'idle_timeout_s': TuningSpec('-> Idle after s', 5, 120, 15),
@@ -154,6 +164,12 @@ class Tuning {
     'prox_startle_on': 0.55,
     'prox_startle_off': 0.4,
     'startle_cooldown_s': 2,
+    'startle_dilate_scale': 1.15,
+    'startle_ease_rate': 6,
+    'tilt_max_deg': 25,
+    'tilt_smoothing': 0.25,
+    'breathe_amplitude': 0.02,
+    'breathe_rate_hz': 0.25,
     'idle_timeout_s': 15,
     'dimming_timeout_s': 45,
     'sleeping_timeout_s': 90,

@@ -179,7 +179,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
         _row('Brightness', 'Brightness'),
       ]),
       _section('Renderer', [
-        _row('Sprite frame', 'SpriteFrame'),
+        _row('Eyelid frame (L / R)', 'EyelidFrame'),
       ]),
       _section('Mind', [
         _row('Interest meter', 'Interest'),
