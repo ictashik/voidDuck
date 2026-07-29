@@ -18,7 +18,16 @@ import 'tuning_panel.dart';
 class DebugOverlay extends StatefulWidget {
   final Widget child;
 
-  const DebugOverlay({super.key, required this.child});
+  /// Dev-only controls rendered above the DEBUG sections — e.g. the
+  /// stage-3 "TEST REACTION" button before real triggers exist. Empty by
+  /// default; not part of the required-fields list itself.
+  final List<Widget> extraActions;
+
+  const DebugOverlay({
+    super.key,
+    required this.child,
+    this.extraActions = const [],
+  });
 
   @override
   State<DebugOverlay> createState() => _DebugOverlayState();
@@ -119,7 +128,18 @@ class _DebugOverlayState extends State<DebugOverlay> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
-                              children: _sections(),
+                              children: [
+                                if (widget.extraActions.isNotEmpty) ...[
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: widget.extraActions,
+                                  ),
+                                  const Divider(
+                                      height: 10, color: Color(0x44FFFFFF)),
+                                ],
+                                ..._sections(),
+                              ],
                             ),
                           ),
                         )
@@ -176,17 +196,32 @@ class _DebugOverlayState extends State<DebugOverlay> {
       ]),
       _section('Camera', [
         _row('Lens', 'CameraLens'),
+        _row('Frame stride', 'FrameStride'),
         _row('Achieved fps', 'AchievedFps'),
         _row('Target fps', 'TargetFps'),
       ]),
       _section('Display', [
         _row('Brightness', 'Brightness'),
       ]),
-      _section('Renderer', [
-        _row('Eyelid frame (L / R)', 'EyelidFrame'),
+      _section('Errors', [
+        _row('Last error', 'LastError'),
+      ]),
+      _section('Reaction Engine', [
+        _row('Active backend', 'ReactionBackend'),
+        _row('Last 5 calls', 'ReactionLog'),
+      ]),
+      _section('Gesture', [
+        _row('Last gesture', 'GestureLast'),
+        _row('Confidence', 'GestureConfidence'),
+        _row('Cooldown', 'GestureCooldown'),
+      ]),
+      _section('Voice', [
+        _row('Mic permission', 'MicPermission'),
+        _row('Recording state', 'RecordingState'),
+        _row('Last clip duration s', 'LastClipDurationS'),
+        _row('Last transcript', 'LastTranscript'),
       ]),
       _section('Mind', [
-        _row('Interest meter', 'Interest'),
         _row('Mood scalar', 'MoodScalar'),
       ]),
       _section('Anim log', [

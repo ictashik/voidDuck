@@ -18,6 +18,20 @@ class TuningPanel extends StatefulWidget {
 }
 
 class _TuningPanelState extends State<TuningPanel> {
+  late final TextEditingController _nameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: Tuning.userName);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final specs = Tuning.specs;
@@ -67,6 +81,8 @@ class _TuningPanelState extends State<TuningPanel> {
           ],
         ),
         const Divider(height: 6, color: Color(0x44FFFFFF)),
+        _sectionHeader('identity'),
+        _nameField(),
         Flexible(
           child: SingleChildScrollView(
             child: Column(
@@ -92,6 +108,39 @@ class _TuningPanelState extends State<TuningPanel> {
           ),
         ),
       );
+
+  Widget _nameField() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 2),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 110,
+            child: Text(
+              'Name',
+              style: TextStyle(color: Color(0xBBFFFFFF), fontSize: 9),
+            ),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _nameController,
+              style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 11),
+              cursorColor: const Color(0xFFFFFFFF),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                border: OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Color(0x44FFFFFF)),
+                ),
+              ),
+              onChanged: (v) => Tuning.userName = v,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _knob(String key) {
     final spec = Tuning.specs[key]!;

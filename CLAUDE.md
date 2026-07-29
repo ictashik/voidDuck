@@ -1,40 +1,40 @@
 # CLAUDE.md — VoidDuck
 
+*This is a full rewrite, not a patch, reflecting the v6 architecture (see `VoidDuck_Specification_v6.md`). It supersedes everything this file said about Rive, custom pixel-art rendering, spring-driven gaze tracking, and the emotion-tag expression system. If anything in the repo still assumes those, that's drift to reconcile toward this document, not the other way around.*
+
 ## What this project is
 
-An offline digital desk pet. A pair of pixel-art eyes floating on a pitch-black field — no head, no body, no glasses frame, just the eyes — on an old Android phone (root optional), propped in landscape, plugged in 24/7. It watches the user via the front camera (ML Kit, fully local), reacts via hand-coded pixel-art rendering (see "Rendering Approach" below), and manages its own screen brightness and inference rate so it can sit on a desk indefinitely.
+An offline desk companion. Runs on an old Android phone (root optional), propped in landscape, plugged in 24/7. It watches occasionally, not continuously in the sense of driving any real-time animation — and reacts through exactly two things on screen: a Unicode emoji and a short line of pixel-font text. There is no illustrated character, no rig, no persistent visual identity beyond that. No microphone, no voice — this was a deliberate choice to avoid an entire second project's worth of scope, not a limitation to work around later.
 
-It has no utility. It is a companion toy. **Every design decision should be judged by "does this make it feel more alive," not "is this efficient."**
+It has no utility beyond being good company. **Every design decision should be judged by "does this make it feel like it's actually noticing something," not "is this efficient" or "is this visually elaborate."**
 
-Full technical spec: `VoidDuck_Specification_v5.md`. Read it before your first change and treat it as authoritative for architecture. This file governs *how we work together*.
+Full technical spec: `VoidDuck_Specification_v6.md`. Read it before your first change and treat it as authoritative for architecture. This file governs *how we work together*.
 
 ---
 
 ## The single most important constraint
 
-**You cannot test this application.** You have no camera, no device, no face. Everything that matters about this project — whether the gaze feels natural, whether the wake animation lands, whether the eyes read as alive — is invisible to you. `flutter build` succeeding tells you almost nothing.
+**You cannot test this application.** No camera, no device, no face — and now, no way to judge whether a generated emoji+text pair actually lands. `flutter build` succeeding tells you almost nothing, and it tells you *less* than it used to, because the Reaction Engine's output is genuinely generative, not just physics you can reason about from the code.
 
 The human is the only test instrument. Structure all your work around that:
 
-1. **Never claim something works.** You can say "this compiles" and "this should produce X behavior." You cannot say "gaze tracking now works." Wait for the human to confirm.
+1. **Never claim something works.** You can say "this compiles" and "this should produce X behavior." You cannot say "the reactions feel right" — you have no way to know that. Wait for the human to confirm.
 2. **Instrument everything.** If the human can't observe it, you can't debug it. See "Debug overlay" below — it is not optional.
-3. **Minimize rebuild round-trips.** Each cycle costs the human a build, a transfer, an install, and a test session. Anything that might need tuning must be tunable *inside the app*, not by editing a constant and rebuilding. This is the highest-leverage rule in this file.
-4. **Ship small.** One coherent change per APK. If the human reports "it feels wrong" after you changed five things, neither of you can tell which one caused it.
+3. **Minimize rebuild round-trips.** Each cycle costs the human a build, a transfer, an install, and a test session — and now, given the model is bundled in the APK, each cycle also costs a meaningfully larger transfer. Anything that might need tuning must be tunable *inside the app*, not by editing a constant and rebuilding.
+4. **Ship small.** One coherent change per APK.
 
 ---
 
 ## Working loop
 
-Each cycle:
+Unchanged in mechanics from prior versions:
 
 1. Human states a goal or gives feedback from the last build.
-2. You propose what you'll change, in one short paragraph, *before* writing code. Flag anything you're uncertain about or any place you're guessing at a value.
+2. You propose what you'll change, in one short paragraph, *before* writing code. Flag anything you're uncertain about.
 3. You implement it.
 4. You build a release APK.
-5. You output a **test card** (format below).
+5. You output a **test card**.
 6. Human side-loads, tests, reports back.
-
-Do not skip step 2. A 30-second check on intent is much cheaper than a wasted build cycle.
 
 ### Build command
 
@@ -42,54 +42,44 @@ Do not skip step 2. A 30-second check on intent is much cheaper than a wasted bu
 flutter build apk --release
 ```
 
-Copy the output to the outputs directory with a versioned name: `voidduck-v0.4.apk`. Increment the minor version every APK, no exceptions — the human needs to be able to say "v0.3 felt better than v0.4" and have that mean something.
+Versioned output, e.g. `voidduck-v0.9.apk`. Increment every APK, no exceptions.
 
 ### Test card format
 
-Every APK ships with this. Keep it short and specific — vague asks get vague feedback.
-
 ```
-## v0.4
+## v0.9
 
-**Changed:** Gaze now runs through a damped spring instead of setting the eye-dot position directly.
+**Changed:** Reaction Engine now fires on the periodic ambient tick, not just Waking.
 
 **Test this:**
-- Move your head side to side slowly. Does the gaze trail you naturally or does it feel sluggish?
-- Move fast, then stop. Does it overshoot and settle, or snap?
-- Open the debug overlay and check: is fps holding at ~15 in Tracking?
+- Sit at the desk for the full ambient-tick interval without leaving. Does a reaction fire on schedule?
+- Check the debug overlay: does the emoji/text pair match what actually happened in frame?
+- Hold up a handwritten note. Does it read the note instead of reacting to the general scene?
 
-**Known rough:** Wake animation still snaps instead of ramping. Not fixed yet.
+**Known rough:** Ambient tick interval is currently hardcoded, not yet in the tuning panel.
 
-**Tuning knobs live in the panel:** spring stiffness, spring damping.
+**Tuning knobs live in the panel:** none yet for this feature — flagged above.
 ```
 
 ### Feedback format for the human
 
-The human should report back roughly like this — remind them if reports get too vague to act on:
-
-- **What I saw:** plain description of behavior
-- **How it felt:** vibes are legitimate data here and often the most important signal
-- **Debug values:** anything relevant off the overlay
-- **Device state:** phone warm? battery holding? anything crash?
-
-"It feels creepy" is a completely valid and useful bug report on this project. Treat it as high priority, and ask follow-up questions to localize it rather than guessing.
+- **What I saw:** plain description
+- **How it felt:** did the reaction feel appropriate, funny, off, generic — this matters more now than it did for physics tuning, since there's no "correct" answer to check against
+- **Debug values:** relevant overlay data
+- **Device state:** thermal, battery, crashes
 
 ---
 
 ## Debug overlay (required in every build)
 
-Hidden behind a triple-tap in the top-left corner. Semi-transparent, small, dismissible. Must show:
+Triple-tap, top-left, semi-transparent, dismissible. Must show:
 
 - Current `PetState` and seconds spent in it
-- Raw ML Kit values: bounding box center + size, `headEulerAngleZ`, `smilingProbability`, both eye-open probabilities
-- Normalized `LookX` / `LookY` after smoothing (and raw, for comparison)
-- Actual achieved camera fps vs target fps
+- Raw ML Kit face detection values (still driving `PetState` transitions exactly as before)
+- Gesture recognizer output: last detected gesture, confidence, cooldown status
+- Last 5 Reaction Engine calls: which trigger fired each one (`Waking` / ambient tick / gesture), the raw `{emoji, text}` output, inference latency, and whether it was valid structured output or hit the fallback default
 - Current screen brightness value
-- Current eyelid-frame index per eye (open/half/closed/squint/wide)
-- Current pupil/highlight-dot position, raw vs. spring-smoothed
-- Interest/attention meter value, current mood scalar
-- Last 5 triggered animations with timestamps
-- `lapSeconds` and `totalSeconds`, as HH:MM:SS
+- Achieved camera fps vs target fps
 
 This overlay is how the human tells you *why* something looks wrong instead of just *that* it looks wrong. When behavior is mysterious, add to this overlay before you add speculative fixes.
 
@@ -97,98 +87,70 @@ This overlay is how the human tells you *why* something looks wrong instead of j
 
 ## In-app tuning panel (required)
 
-Also behind the debug gesture, on a second tab. Every magic number in the codebase that affects feel must be a live slider here, persisted across app restarts:
+Every number that affects feel, live-editable, persisted across restarts:
 
-- Spring stiffness and damping for gaze
-- All smile/blink/proximity thresholds (both the on and off values for hysteresis)
-- Debounce frame counts
-- All four PetState timeouts
+- Ambient-tick interval (how often the periodic Reaction Engine call fires during `Tracking`)
+- Gesture debounce frame count and post-trigger cooldown
+- All four `PetState` timeouts
 - Brightness levels and ramp durations per state
-- Stare-break frequency range
-- Interest decay rate
-- Ambient quirk interval range
-- Lap-ring reference duration, star-field seed rate (minutes per star) and max star count
+- Banner text scroll speed
 
-Add a "copy current values" button that dumps them as a Dart snippet the human can paste to you. Then tuning becomes a conversation instead of a build queue.
-
-**If you find yourself writing a numeric literal that affects how the eyes feel, it belongs in this panel.**
+Add a "copy current values" button that dumps them as a Dart snippet. **If you find yourself writing a numeric literal that affects how this feels, it belongs in this panel.**
 
 ---
 
-## Aliveness systems
+## What "alive" means now
 
-These are the point of the project. Implement them as separate, independently toggleable layers so the human can turn each on and off in the debug panel to feel its individual contribution.
+The aliveness layers from earlier versions (damped gaze, stare-break, idle breathing, micro-drift, an interest meter, response pools, notice latency, circadian mood, rare events) were built for a continuously-animated procedural character. That character doesn't exist anymore. Some of those ideas survive in adapted form; most don't, and shouldn't be forced to.
 
-| Layer | What it does |
-|---|---|
-| Damped gaze | Trails the face by ~150ms, overshoots on fast movement, settles |
-| Stare-break | Brief glance off-axis every 3–8s, then back |
-| Idle breathing | Always-running loop under everything, amplitude varies by state |
-| Micro-drift | Tiny continuous random jitter in the eye pair's position |
-| Interest meter | Decays when the scene is static, refreshes on novelty; low interest = the eyes look away and do their own thing |
-| Response pools | Every trigger picks from 3–4 variants, weighted random, never the same one twice consecutively |
-| Notice latency | Randomized 200ms–1.5s delay before reacting to reacquisition |
-| Circadian mood | Device clock biases animation speed and energy; groggy at 3am, perky at 9am |
-| Rare events | ~1-in-300 special animations (sneeze, dream bubble, glance behind the user) |
+**Survives, adapted:**
+- **Response variety / no consecutive repeats** — keep a short in-memory list of the last few generated lines and pass them to the Reaction Engine's prompt as "don't repeat these." Same principle as before, now implemented as prompt context instead of a hardcoded pool.
+- **Circadian mood** — the device clock can still bias the system prompt's tone (groggier phrasing late at night, more energetic mid-morning). Cheap, still fits, no procedural animation required.
+- **Rare events** — occasionally swap in a special prompt variant for the ambient tick (roughly 1-in-300) rather than the standard one. Same "creates folklore" rationale as before.
+- **Absence-scaled greeting** — feed the actual absence duration into the `Waking` trigger's prompt context and let the model calibrate tone itself (a 30-second gap vs. an 8-hour one), rather than hand-coding animation-intensity tiers. This is a good example of the new architecture doing for free what used to require explicit logic.
 
-### Signature moments
+**Resolved by architecture, not reimplemented:**
+- **Notice latency** — used to be simulated (a randomized delay before reacting). Now it's real: the model call itself takes a few seconds. Don't add artificial delay on top of it.
 
-Build these deliberately, they are the personality:
-
-- **Staring contest** — sustained eye contact without blinking builds into a micro-jitter/darting under the held tension, then the eyes break away first. The user can win.
-- **Debugging listen** — sustained close proximity (as opposed to a sudden lean-in, which startles) shifts the eye pair into a slow, synchronized nodding arc — no head or torso needed. This is the thematic heart of the project.
-- **Staged sleep** — eyelids droop, jerk back up, droop again, closed. Never a cut.
-- **Exit glance** — when the face leaves frame, the eye pair keeps watching the edge it left through, then searches, then gives up.
-- **Absence-scaled greeting** — a 30-second absence gets a mild look-up; an 8-hour absence gets the full delighted greeting.
-
----
-
-## Rendering Approach
-
-No Rive dependency, no external rig or state-machine asset, and no head/body/glasses geometry — the character *is* a pair of eyes, rendered natively in Flutter:
-
-- Each eye is a code-defined pixel-art socket grid (2D array of colors painted as filled rects via `CustomPainter`), not a PNG sprite sheet and not an external art tool. Art-making stays inside code.
-- Eyelid state (open, half, closed/blink, squint/happy, wide/startled) is a discrete frame-swap on a timer or trigger — a handful of grid variants per eye, the way retro sprite animation works. Pair-level transforms (rigid rotation for head-tilt, scale/spacing for proximity/startle, a slow position/scale pulse for idle breathing, a nodding arc for the debugging-listen pose) move the whole eye pair as one unit on top of whichever eyelid frame is active.
-- The pupil/highlight dot is the one exception to frame-based rendering: drawn on top of the socket every frame, positioned continuously from the damped-spring LookX/LookY math (see "Damped gaze" in the Aliveness systems table). Never pixel-snap or frame-swap its position — it has to stay smooth and continuous, or the gaze-tracking feel described throughout this doc breaks.
-- Rationale: motion sells "alive," not art fidelity. Keep the easy-to-get-wrong part (illustration) minimal and code-simple, and put the effort into the part that actually matters (motion).
+**Retired, no replacement:**
+- Damped gaze, stare-break, idle breathing, micro-drift, the interest meter — all were mechanics of a continuously-rendered character that no longer exists.
+- **Staring contest** and **exit glance** — both depended on continuous eye/gaze mechanics with nothing to map onto now. Don't force an equivalent.
+- **Staged sleep** — replaced by the fixed sleep-default emoji (Section 4.3 of the spec). Much simpler; that's fine.
+- **Debugging listen** — this is the one worth carrying forward explicitly, because it's the thematic core of the whole project: the held-up-note case (the "show me something" gesture trigger, prompted to read and respond to handwritten text) *is* the new version of "the character listens while you debug." Same purpose, different mechanism.
 
 ---
 
 ## Non-negotiables
 
-Violating any of these is a build-breaking bug, not a preference:
-
-1. **No `INTERNET` permission.** Not in the source manifest, and not in the merged manifest. Check `app/build/outputs/.../AndroidManifest.xml` after every build that adds or updates a dependency — plugins can inject permissions during the Gradle merge. If it ever appears, stop and report it before doing anything else.
-2. **No camera data leaves RAM.** No frames, no crops, no landmarks, no derived biometric values written to disk, ever.
-3. **The camera preview is never rendered.** The feed runs invisibly. If a preview widget appears on screen, that's a bug.
+1. **No `INTERNET` permission, ever.** Check the *merged* manifest post-build, not just the source. This is now categorically true rather than aspirational — the model is bundled, not downloaded, and nothing else in this spec touches the network. If `INTERNET` ever appears, stop and report it before doing anything else.
+2. **No camera data leaves RAM.** No frames, no crops, saved to disk — this explicitly includes frames used for the Reaction Engine, including the held-up-note case. Reading text from a frame is not the same as storing it.
+3. **The camera preview is never rendered.**
 4. **Landscape locked.**
-5. **Root is optional, and if present, used for ACC battery capping only — nothing else.** Every core system (camera, ML Kit, rendering, brightness, wakelock) runs on stock userspace APIs and must work identically on a non-rooted phone. Screen control stays in userspace via brightness APIs regardless of root status. Do not add root-dependent display code, and never gate any pet behavior behind a root check — only the ACC integration should branch on it. Detect root at startup (a root-check package is fine); if present, offer to enable ACC; if absent, skip silently and say nothing about it in the normal UI.
-6. **Pupil position is never frame-snapped or quantized.** It's computed continuously every frame from the spring-damped LookX/LookY values, independent of whichever eyelid frame (open/half/closed/squint/wide) or pair-level transform is currently active.
+5. **Root is optional, and if present, used for ACC battery capping only.** Every core system runs on stock userspace APIs regardless of root status.
+6. **`RECORD_AUDIO` is a required permission, but the microphone is never continuously listening.** This replaces the earlier "no microphone" rule — that was a deliberate choice at the time, revisited by an explicit, separate decision when gesture-triggered voice recording was added (spec Section 4.2.3/4.4). The constraint that survives from the old rule is the one that actually mattered: no wake word, no hotword, no always-on audio pipeline. The mic is only ever live for one bounded window per trigger — from the end of the 3-2-1 countdown after `Open_Palm` fires, until recording stops (`Closed_Fist` or the hard time cap). Outside that window it is not recording, full stop. Check the *merged* manifest for `RECORD_AUDIO` with the same discipline as non-negotiable #1's `INTERNET` check — present is correct now, but if a future change turns this into anything resembling continuous listening, stop and report it before doing anything else; that would need its own explicit, separate decision, same as this one was.
+7. **The model is bundled as an APK asset, never downloaded at runtime.** This is what makes non-negotiable #1 airtight. Don't add a download-on-first-run path even as a fallback.
+8. **There is always an emoji on screen.** Structured output schema plus a fixed fallback default if a call ever returns malformed output — never a blank or error state.
 
-### The one persistence carve-out
+### The persistence carve-out
 
-Circadian mood, absence-scaled greetings, and the lifetime total-time counter need state across restarts. Permitted storage is **exactly three values**: a last-seen-face timestamp, a mood scalar, and `totalSeconds` (a monotonically increasing count of cumulative Tracking/Idle presence time, in seconds). Nothing else. No counts of faces, no session logs, no expression history, no timestamped history of any kind — `totalSeconds` is a single running total, not a log. If you think you need to persist a fourth thing, ask first — this boundary is deliberate and the human owns it, not you.
+Still exactly as constrained as before: last-seen-face timestamp, a mood scalar, and `totalSeconds` (added with explicit sign-off when the timer feature was introduced). The timer's *visual* representation (the old ring/star-field design) no longer fits the four-zone layout and needs a fresh decision — but the underlying data tracking is still permitted to exist. Don't invent a new visual for it without asking; that's an open item, not yours to resolve unilaterally. No other new persisted values without the same explicit sign-off.
 
 ---
 
 ## Build order
 
-Checkpoint after each. Don't run ahead — each stage needs device confirmation before the next is worth building.
-
-1. **Scaffold** — Flutter project, landscape lock, black scaffold, wakelock, debug overlay skeleton.
-2. **Camera pipeline** — invisible stream, `CameraImage → InputImage` conversion, face detection running, raw values displayed in the overlay. *This is the highest-risk stage: YUV plane layout, stride padding, and rotation metadata vary by manufacturer, and the target is an old phone with unpredictable HAL behavior. Test on the real device, not an emulator. Expect this to take longer than it looks.*
-3. **Placeholder tracking** — a plain circle on screen following the face, with smoothing. Proves the whole pipeline end to end without needing any art. **Do not wait for pixel-art assets to start this.**
-4. **PetState machine** — the five states, brightness ramps, inference throttling. Testable with the circle.
-5. **Pixel rendering** — replace the placeholder circle with the eye pair: code-defined pixel-art eye-socket grids with eyelid-frame states (open/half/closed/squint/wide), pair-level transforms for tilt/proximity/breathing/listen, and the continuously spring-driven pupil dot layered on top inside each socket.
-6. **Aliveness layers** — add one at a time, each independently toggleable, each with its own test cycle.
-7. **Signature moments.**
-8. **Lap/total timers** — lapSeconds (since the last Waking, in-memory only) and totalSeconds (lifetime, persisted) tracked off `PetState`; encoded ambiently as a lap ring around each eye socket and a slowly-seeded background star field, with exact HH:MM:SS values available in the debug overlay. Independently toggleable in the debug panel like the other aliveness layers — this reads PetState, it doesn't drive it.
-9. **Soak test** — leave it running overnight. Check morning-after thermals, battery, memory, whether it still wakes correctly. This stage is not optional; a desk pet that dies after six hours has failed at its only job.
+1. Confirm the existing camera pipeline, `PetState` machine, and brightness/inference throttling still work — this has survived every version unchanged and shouldn't need rebuilding.
+2. Four-zone static layout: emoji zone, scrolling pixel-font banner zone, placeholder content, no model yet.
+3. Bundle the chosen model as an asset; wire one structured `{emoji, text}` call against a static test image end to end before touching triggers.
+4. Wire the three triggers (`Waking`, ambient tick, gesture) one at a time, each its own test cycle.
+5. Gesture detection as its own isolated stage — separate on-device model from the Reaction Engine, test independently.
+6. Fallback paths: sleep default, malformed-output default. Small, don't skip.
+7. Soak test — multi-hour idle stretch, checking whether the bundled model's presence changes thermal behavior when combined with the existing continuous camera/gesture pipelines.
 
 ---
 
 ## Notes on tone
 
-When the human reports something feels off, resist the urge to immediately ship a fix. Ask what specifically felt wrong first — "creepy," "sluggish," and "robotic" have completely different causes and the wrong guess costs a full cycle.
+When the human reports a reaction felt off, ask what specifically felt wrong before touching the prompt — "generic," "tone-deaf," and "just wrong about what it saw" have different causes and point at different parts of the pipeline (prompt design vs. model capability vs. a vision-reading miss).
 
-If you think a request will make the eyes feel *less* alive, say so before implementing it. Being useful here means having an opinion about the character, not just executing instructions.
+If you think a request will make responses feel more generic or less appropriate to the moment, say so before implementing it.

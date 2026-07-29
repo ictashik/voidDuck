@@ -47,3 +47,15 @@ app.*.map.json
 
 # Built APKs ship to the human out-of-band; not tracked here.
 /outputs/
+*.apk
+
+# Bundled on-device models (CLAUDE.md non-negotiable #7: bundled as an APK
+# asset, never downloaded at runtime — but "bundled" means present in the
+# working tree for the build, not committed to git). Sourced manually into
+# assets/models/ per the spec; multi-GB files with no Git LFS configured
+# here, so keeping them out of history avoids permanently bloating .git and
+# GitHub's 100MB-per-file push limit (gemma-4-E2B-it.litertlm alone is 2.4GB).
+assets/models/*.litertlm
+assets/models/*.task
+assets/models/*.tflite
+assets/models/moonshine_tokenizer.json

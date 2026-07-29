@@ -134,6 +134,14 @@ class FaceTracker {
   }
 
   Future<void> _process(FrameData frame) async {
+    // Visibility for the stride-mismatch theory: if bytesPerRow ever
+    // diverges from width, that's the padding this fix accounts for: if it
+    // never diverges on this device, the crash has a different cause.
+    DebugBus.instance.put(
+      'FrameStride',
+      '${frame.width}w bytes/row=${frame.bytesPerRow} '
+          '(${frame.bytesPerRow == frame.width ? "match" : "PADDED"})',
+    );
     final input = InputImage.fromBytes(
       bytes: frame.bytes,
       metadata: InputImageMetadata(
@@ -142,7 +150,7 @@ class FaceTracker {
                 frame.rotationDegrees ~/ 90 * 90) ??
             InputImageRotation.rotation0deg,
         format: InputImageFormat.nv21,
-        bytesPerRow: frame.width,
+        bytesPerRow: frame.bytesPerRow,
       ),
     );
     try {

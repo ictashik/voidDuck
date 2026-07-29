@@ -26,6 +26,13 @@ class CameraService {
   CameraController? get controller => _controller;
   bool get isStreaming => _streaming;
 
+  // Held only in RAM, overwritten every emitted frame — never persisted
+  // (non-negotiable #2). This is what trigger-time reaction calls (Waking /
+  // ambient tick / gesture) grab a snapshot from instead of the continuous
+  // ML Kit stream, which only ever sees frames, never keeps one.
+  FrameData? _latestFrame;
+  FrameData? get latestFrame => _latestFrame;
+
   /// Current minimum gap between emitted frames, in microseconds.
   int _currentMinIntervalUs = 66666; // 15fps default
   int _lastEmittedUs = 0;
@@ -55,12 +62,16 @@ class CameraService {
     await _controller!.initialize();
     await _controller!.startImageStream(_onImage);
     _streaming = true;
+    final previewSize = _controller!.value.previewSize;
+    final previewSizeLabel = previewSize == null
+        ? 'unknown'
+        : '${previewSize.width.toStringAsFixed(0)}x'
+            '${previewSize.height.toStringAsFixed(0)}';
     DebugBus.instance.put('CameraLens',
         '${front.lensDirection.name} "${front.name}" sensor@${front.sensorOrientation}° '
-        '${_controller!.value.previewSize}');
+        '$previewSizeLabel');
     if (kDebugMode) {
-      debugPrint('Camera started: ${front.name} '
-          '${_controller!.value.previewSize}');
+      debugPrint('Camera started: ${front.name} $previewSizeLabel');
     }
   }
 
@@ -86,6 +97,7 @@ class CameraService {
       final rotation =
           Tuning.get('camera_rotation').round().clamp(0, 270) ~/ 90 * 90;
       final frame = FrameData.from(image, rotation);
+      _latestFrame = frame;
       _framesController.add(frame);
     } catch (e, st) {
       // Never let a throw in _onImage tear down the camera stream — it would

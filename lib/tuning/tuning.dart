@@ -6,8 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// knob here and a slider in the tuning panel. This is the highest-leverage
 /// rule in CLAUDE.md: no rebuild-required tuning.
 ///
-/// Values are stored as `double`. Integer-ish values (frame counts, rotations
-/// in degrees) are read through `.round()` helpers in the call sites.
+/// Values are stored as `double`. Integer-ish values (frame counts, minutes)
+/// are read through `.round()` helpers in the call sites.
 class Tuning {
   Tuning._();
   static SharedPreferences? _prefs;
@@ -40,6 +40,24 @@ class Tuning {
   static double get(String key) => _p.getDouble(key) ?? (_defaults[key] ?? 0.0);
 
   static void set(String key, double v) => _p.setDouble(key, v);
+
+  static const String _userNameKey = 'user_name';
+  static const String userNameDefault = 'Ashikh';
+
+  /// The one non-numeric tuning value (spec: the human's name, used to
+  /// personalize Waking greetings and the away-state banner). Kept
+  /// separate from the numeric `specs`/`_defaults` machinery above rather
+  /// than shoehorned into a double, and edited via its own text field in
+  /// the tuning panel instead of a slider.
+  static String get userName {
+    final v = _p.getString(_userNameKey);
+    return (v == null || v.trim().isEmpty) ? userNameDefault : v;
+  }
+
+  static set userName(String v) {
+    final trimmed = v.trim();
+    _p.setString(_userNameKey, trimmed.isEmpty ? userNameDefault : trimmed);
+  }
 
   static void reset() {
     for (final key in _defaults.keys) {
@@ -79,36 +97,8 @@ class Tuning {
     // --- Debounce (consecutive frames before a state-changing event) ---
     'debounce_face_lost': TuningSpec('Face-lost frames', 1, 30, 4, step: 1),
     'debounce_face_gained': TuningSpec('Face-gained frames', 1, 30, 3, step: 1),
-    'debounce_startle': TuningSpec('Startle frames', 1, 30, 3, step: 1),
 
-    // --- Damped gaze (aliveness layer) ---
-    'layer_damped_gaze': TuningSpec('Damped gaze on', 0, 1, 1, step: 1),
-    'gaze_spring_stiffness': TuningSpec('Spring stiffness', 10, 300, 90),
-    'gaze_spring_damping': TuningSpec('Spring damping', 1, 40, 12),
-
-    // --- Smile hysteresis (CLAUDE.md spec) ---
-    'smile_on': TuningSpec('Smile on prob', 0, 1, 0.7),
-    'smile_off': TuningSpec('Smile off prob', 0, 1, 0.5),
-
-    // --- Blink thresholds ---
-    'eye_closed': TuningSpec('Eye closed prob', 0, 1, 0.3),
-
-    // --- Proximity (bounding box size as fraction of frame) ---
-    'prox_startle_on': TuningSpec('Startle box > %', 0, 1, 0.55),
-    'prox_startle_off': TuningSpec('Startle box < %', 0, 1, 0.4),
-    'startle_cooldown_s': TuningSpec('Startle cooldown s', 0, 10, 2),
-    'startle_dilate_scale': TuningSpec('Startle dilate scale', 1.0, 1.5, 1.15),
-    'startle_ease_rate': TuningSpec('Startle ease /s', 1, 20, 6),
-
-    // --- Head tilt -> eye-pair rotation ---
-    'tilt_max_deg': TuningSpec('Max tilt deg', 5, 45, 25),
-    'tilt_smoothing': TuningSpec('Tilt smoothing', 0, 1, 0.25),
-
-    // --- Idle breathing pulse (always-on ambient, ties to no detection state) ---
-    'breathe_amplitude': TuningSpec('Breathe amplitude', 0, 0.1, 0.02),
-    'breathe_rate_hz': TuningSpec('Breathe rate Hz', 0.05, 1.0, 0.25),
-
-    // --- PetState timeouts (Section 6 of spec) ---
+    // --- PetState timeouts (spec Section 4/6) ---
     'idle_timeout_s': TuningSpec('-> Idle after s', 5, 120, 15),
     'dimming_timeout_s': TuningSpec('-> Dimming after s', 5, 180, 45),
     'sleeping_timeout_s': TuningSpec('-> Sleeping after s', 5, 300, 90),
@@ -121,30 +111,46 @@ class Tuning {
     'bright_sleeping': TuningSpec('Bright Sleeping', 0, 1, 0.03),
     'bright_ramp_rate': TuningSpec('Bright change / s', 0.05, 5, 1.5),
 
-    // --- Stare-break (later stage) ---
-    'stare_break_min_s': TuningSpec('Stare-break min s', 1, 30, 3),
-    'stare_break_max_s': TuningSpec('Stare-break max s', 1, 30, 8),
+    // --- Banner (Zones 2-4, spec Section 3) ---
+    'banner_reveal_chars_per_s':
+        TuningSpec('Banner reveal chars/s', 2, 60, 18, step: 1),
+    'banner_cursor_blink_ms':
+        TuningSpec('Banner cursor blink ms', 100, 2000, 500, step: 50),
 
-    // --- Interest meter (later stage) ---
-    'interest_decay_per_s': TuningSpec('Interest decay /s', 0, 0.5, 0.03),
-    'interest_refresh': TuningSpec('Interest refresh', 0, 1, 0.6),
+    // --- Reaction Engine triggers (spec Section 4.1) ---
+    'ambient_tick_interval_s':
+        TuningSpec('Ambient tick every s', 20, 900, 120, step: 5),
 
-    // --- Ambient quirk idle interval (CLAUDE.md spec Section 5) ---
-    'quirk_min_s': TuningSpec('Quirk min s', 5, 300, 30),
-    'quirk_max_s': TuningSpec('Quirk max s', 5, 300, 90),
+    // --- Gesture (Open_Palm) trigger (spec Section 4.2.3) ---
+    'gesture_poll_interval_ms':
+        TuningSpec('Gesture poll every ms', 100, 2000, 400, step: 50),
+    'gesture_confidence_threshold':
+        TuningSpec('Gesture min confidence', 0.1, 1.0, 0.6, step: 0.05),
+    'gesture_debounce_frames':
+        TuningSpec('Gesture debounce polls', 1, 10, 2, step: 1),
+    'gesture_cooldown_s':
+        TuningSpec('Gesture cooldown s', 5, 180, 20, step: 5),
+    // How long a gesture/voice exchange counts as an ongoing "conversation":
+    // ambient is held off and a follow-up gesture or voice trigger gets the
+    // prior reply as context, instead of being treated as a fresh,
+    // unrelated encounter. Bumped from 45s to 300s (5 min) now that voice
+    // shares this same window — a spoken exchange plausibly has pauses
+    // (thinking, typing a follow-up) longer than the old gesture-only value
+    // assumed.
+    'conversation_window_s':
+        TuningSpec('Conversation window s', 15, 600, 300, step: 15),
 
-    // --- Rare events (~1-in-300 chance per ambient tick) ---
-    'rare_event_chance': TuningSpec('Rare-event chance', 0, 0.1, 0.0033),
+    // --- Voice recording (Open_Palm trigger, spec Section 4.4) ---
+    // Hard cap on one recording window: Closed_Fist stops it early, this is
+    // the ceiling if it never comes. Not really a technical limit of the
+    // chunked-STT approach (each 5s chunk is independent), but a UX one —
+    // how long anyone should reasonably be expected to talk in one go.
+    'recording_max_duration_s':
+        TuningSpec('Recording max duration s', 5, 60, 30, step: 5),
 
-    // --- Notice latency (reacquisition) ---
-    'notice_latency_min_ms': TuningSpec('Notice latency min ms', 0, 3000, 200, step: 10),
-    'notice_latency_max_ms': TuningSpec('Notice latency max ms', 0, 3000, 1500, step: 10),
-
-    // --- Lap/total timers (ambient ring + star field, aliveness layer) ---
-    'layer_lap_timers': TuningSpec('Lap/total timers on', 0, 1, 1, step: 1),
-    'lap_ring_minutes': TuningSpec('Lap ring minutes', 1, 120, 25),
-    'star_minutes_per_star': TuningSpec('Star minutes/star', 1, 120, 20),
-    'star_max_count': TuningSpec('Star max count', 10, 500, 120, step: 1),
+    // --- Device thermal readout (top-left corner) ---
+    'device_temp_warn_c':
+        TuningSpec('Temp warn threshold C', 30, 60, 42, step: 1),
   };
 
   /// Suggested defaults. MUST stay in sync with [specs].
@@ -160,22 +166,6 @@ class Tuning {
     'min_face_size': 24,
     'debounce_face_lost': 4,
     'debounce_face_gained': 3,
-    'debounce_startle': 3,
-    'layer_damped_gaze': 1,
-    'gaze_spring_stiffness': 90,
-    'gaze_spring_damping': 12,
-    'smile_on': 0.7,
-    'smile_off': 0.5,
-    'eye_closed': 0.3,
-    'prox_startle_on': 0.55,
-    'prox_startle_off': 0.4,
-    'startle_cooldown_s': 2,
-    'startle_dilate_scale': 1.15,
-    'startle_ease_rate': 6,
-    'tilt_max_deg': 25,
-    'tilt_smoothing': 0.25,
-    'breathe_amplitude': 0.02,
-    'breathe_rate_hz': 0.25,
     'idle_timeout_s': 15,
     'dimming_timeout_s': 45,
     'sleeping_timeout_s': 90,
@@ -185,19 +175,16 @@ class Tuning {
     'bright_dimming': 0.08,
     'bright_sleeping': 0.03,
     'bright_ramp_rate': 1.5,
-    'stare_break_min_s': 3,
-    'stare_break_max_s': 8,
-    'interest_decay_per_s': 0.03,
-    'interest_refresh': 0.6,
-    'quirk_min_s': 30,
-    'quirk_max_s': 90,
-    'rare_event_chance': 0.0033,
-    'notice_latency_min_ms': 200,
-    'notice_latency_max_ms': 1500,
-    'layer_lap_timers': 1,
-    'lap_ring_minutes': 25,
-    'star_minutes_per_star': 20,
-    'star_max_count': 120,
+    'banner_reveal_chars_per_s': 18,
+    'banner_cursor_blink_ms': 500,
+    'ambient_tick_interval_s': 120,
+    'gesture_poll_interval_ms': 400,
+    'gesture_confidence_threshold': 0.6,
+    'gesture_debounce_frames': 2,
+    'gesture_cooldown_s': 20,
+    'conversation_window_s': 300,
+    'recording_max_duration_s': 30,
+    'device_temp_warn_c': 42,
   };
 }
 

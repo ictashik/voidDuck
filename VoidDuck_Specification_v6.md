@@ -1,0 +1,76 @@
+# Project Specification: VoidDuck (Desk Pet Companion) — v6
+
+*v6 is a full rewrite, not a patch. It supersedes every earlier version. If v5-or-later drift exists in the repo, treat this document as the source of truth and reconcile toward it, not the other way around.*
+
+## 1. Project Overview
+**Concept:** A 100% offline, privacy-first desk companion for developers. Runs continuously on a repurposed Android device (root optional — see Section 2), propped in landscape, plugged into wall power. It watches, occasionally reacts to what it sees, and communicates entirely through a Unicode emoji and a short line of pixel-font text — no persistent illustrated character, no rig, no custom-drawn art.
+**Character:** There isn't one, deliberately. Identity comes from *what it notices and says*, not from a consistent mascot. This directly satisfies the original "give it life" goal by a different route than anything tried earlier — variety and appropriateness from an LLM's judgment, instead of hand-authored physics or artwork.
+**Interaction:** Primarily passive and visual — no wake word, no continuous listening. You can hold up a handwritten note; it reads that the same way it reads the rest of the scene. Voice is now supported too, but only as a second deliberate gesture-gated trigger (Section 4.4), not an always-on microphone: `Open_Palm` starts a bounded countdown-then-record window, `Victory` (previously `Open_Palm`) remains the deliberate "look at this" visual trigger. This was originally a "no microphone, ever" design (sidestepping STT/TTS, a mic permission, an untestable-by-me audio pipeline) — revisited by an explicit, separate decision once it became clear the same on-device model stack could support a bounded voice exchange without turning into always-on listening.
+**Environment:** Pitch black background, landscape orientation, minimalist.
+
+## 2. Hardware & OS Constraints
+Unchanged from v3–v5: old Android smartphone, landscape-mounted, root optional (used only for ACC battery capping if present — see the non-root fallback guidance from earlier versions if that section needs restating). Display brightness stays entirely software-controlled regardless of root status.
+
+## 3. Screen Layout
+Split horizontally into four equal zones:
+- **Zone 1 (leftmost quarter):** the emoji. Rendered as plain Unicode text at a large size — Android's system font handles this natively, no asset, no package, no license to track.
+- **Zones 2–4 (remaining three quarters):** the pixel-font banner — the LLM's short text response, rendered in a bitmap-style font (`Press Start 2P`, free and open-licensed via Google Fonts, drop-in for Flutter). If text is too long for the visible width, scroll it; don't truncate silently.
+
+## 4. Core Architecture & Data Flow
+The `PetState` machine from earlier versions is retained unchanged as the lifecycle backbone — it still owns brightness ramps and camera/inference throttling exactly as specified in prior versions (`Tracking` → `Idle` → `Dimming` → `Sleeping`, with `Waking` on return). What's new is what happens *within* those states: a **Reaction Engine** that produces the emoji+text pair shown on screen.
+
+### 4.1 Reaction Engine
+An on-device, vision-capable LLM (Gemma E2B, upgradeable to E4B — see Section 6) is called with the current camera frame and a system prompt instructing it to react to what it sees. The prompt should explicitly handle two cases in one pass rather than branching in code: general scene ("react to what you notice") and a deliberately held-up handwritten note ("if something is written and shown to you, read and respond to that instead"). Output is **structured**, not free text — a required schema of `{emoji: string, text: string}` — enforced at the model call level (`flutter_gemma`'s structured/function-calling output), so "always an emoji" is a data-layer guarantee, not a prompt-level hope. Text is capped at ~100 characters.
+
+**Fallback:** if a call ever returns malformed or missing output, display a small fixed default emoji rather than nothing. Same category as the sleep default below — there's always something on screen, never a blank or error state.
+
+### 4.2 Trigger events
+The Reaction Engine is invoked on exactly four events — never continuously:
+1. **`Waking`** — the return-from-absence greeting. Always fires. This is the same "welcome back" moment that's existed since v1's Rive welcome-animation trigger; only the rendering mechanism has changed across every version since.
+2. **Periodic ambient tick during `Tracking`** — every N minutes (tunable; see the existing tuning-panel convention from prior versions), a "just noticed something" reaction. Keeps it feeling alive between deliberate interactions without burning continuous compute.
+3. **Deliberate "show me something" gesture** — a `Victory` gesture (MediaPipe Gesture Recognizer, a built-in recognized category; several Flutter packages wrap this fully on-device) signals intentional communication, same debounce/cooldown convention as every other trigger in this spec. This is the trigger for the handwritten-note use case specifically, though the prompt itself remains flexible enough to react to either case regardless of which trigger fired it. (This used to be `Open_Palm` — that category now starts the voice trigger below instead, so the gesture moved to `Victory` to keep the two unambiguous.)
+4. **Deliberate voice message** — `Open_Palm` starts a bounded record-and-reply exchange (Section 4.4), a longer-form counterpart to the gesture trigger above. `Closed_Fist` is recognized by the same on-device model but is only ever polled for while a recording is in progress, where it stops the recording early.
+
+### 4.3 Sleeping default
+While `Sleeping`, show a fixed default emoji (e.g. 😴) with no text and no Reaction Engine call — zero cost, zero latency, matches the "SoC does far less work while the desk is empty" principle that's been core to the power-management design since Section 6 of v2.
+
+### 4.4 Voice recording trigger
+`Open_Palm` fires a 3-2-1 on-screen countdown, then begins recording. Recording continues until either a `Closed_Fist` gesture is detected or a hard time cap elapses (tunable, default 30s) — whichever comes first. The mic is live only for that bounded window: from the end of the countdown to the stop condition, never before and never continuously. A visible "recording" indicator is required for the entire window, so it's obvious to anyone nearby that the mic is live right now, not in general.
+
+The clip never touches disk — captured as raw 16kHz mono PCM straight into RAM, same "camera frames never leave RAM" discipline extended to audio (Section 6). On-device speech-to-text (bundled, not downloaded — same distribution rule as the Reaction Engine's own model, Section 5) transcribes the clip to text. That transcript is then passed through the *same* Reaction Engine call path the gesture trigger already uses — same model, same session machinery, no separate "voice model" — except the reply is a distinct, longer response mode: up to ~100 words, rather than the ambient/gesture one-liner's ~100-character cap. The banner rendering handles both lengths: the short quip stays centered and non-scrolling; a long-form reply switches to a smaller, left-aligned, auto-scrolling layout, since a real paragraph routinely overflows the banner zone's height at the short form's size.
+
+Voice and the `Victory` gesture trigger share one conversation-mode window and history (Section 4.2): a reply from either modality holds ambient off and feeds forward as continuity context for whichever trigger fires next, so someone can switch from showing a note to speaking mid-exchange without it reading as a fresh first encounter. This shared window is longer than the gesture-only window used in earlier iterations of this feature, to comfortably fit a spoken back-and-forth rather than a single quick glance.
+
+If interrupted mid-flow — face leaves frame, app backgrounded, or any internal error in the record/transcribe path — the flow resets cleanly rather than leaving the mic pipeline stuck in a "recording" state.
+
+**Known open issue, parked for now (as of v0.13):** the stage still sometimes flashes back to the pre-trigger reaction instead of showing the new voice reply once the "replying" phase hands back to the normal view. One real cause was found and fixed — the ambient tick timer racing the in-flight voice call for the single-call-at-a-time guard, since a full voice cycle (60-90s) can outlast the assumption that ambient and a gesture/voice reply never overlap — but the symptom persisted after that fix, so there's at least one more contributing cause still unidentified. Next time this is picked back up: check whether `_engineBusy`/`_reaction` can still be raced by some other path (the debug TEST REACTION button doesn't check `_voicePhase` either), or whether the STT/reply pipeline is occasionally returning before `_reaction` actually gets set.
+
+## 5. Model & Structured Output
+- **Package:** `flutter_gemma` — purpose-built for this, supports the Gemma family directly, vision input, structured/function-calling output, GPU acceleration.
+- **Model:** start with Gemma 4 E2B (smaller bundle, faster iteration). Treat E4B as an upgrade path if caption quality disappoints in testing — don't reach for the bigger model until the smaller one has actually been tried and found wanting. Note: this model does not itself support audio input (that flag is Gemma 3n E4B-only in `flutter_gemma`) — the voice trigger (Section 4.4) reaches it via a text transcript, not a raw audio message, rather than swapping the bundled model.
+- **Speech-to-text (voice trigger only):** `flutter_gemma_speech`'s `LiteRtSttBackend`, running the bundled Moonshine Tiny model (`SttModelType.moonshine` — the only shipped profile as of this writing; Whisper/Parakeet need a log-mel frontend not yet available). Its native input is a fixed 5-second window, so a longer clip is chunked into consecutive 5-second slices and each transcribed separately, concatenating the text — there's no larger-window or streaming variant for this model.
+- **Distribution:** every model (Gemma, the MediaPipe gesture recognizer, Moonshine) is bundled as a Flutter asset inside the APK, loaded from a local path — none downloaded at runtime. See the discussion above this document for the full reasoning; the short version is that this is the only option that keeps `INTERNET` permission absent forever and avoids re-downloading the model on every sideload during testing. Model files must be sourced manually (e.g. from Hugging Face) and placed in the project — this isn't something the build agent can fetch on its own given typical sandbox constraints. Bundling this many on-device models makes for a genuinely large APK (multiple gigabytes) — a real cost of this architecture, not an incidental one, and worth weighing before adding another.
+
+## 6. Privacy & Security Requirements
+- **Absolute offline mode, now airtight rather than aspirational:** with every model bundled rather than downloaded, there is no scenario in this spec that ever needs `INTERNET` permission. Verify this in the *merged* manifest post-build, not just the source — this check has been standing advice since v1 and still applies.
+- **Camera frames:** processed in RAM for the Reaction Engine call and discarded immediately after. No frames, no crops, saved to disk — including the ones used to read a held-up note. Reading text from a frame is not the same as storing it; nothing about this feature changes the no-disk-writes rule.
+- **Microphone (Section 4.4):** `RECORD_AUDIO` is now a required permission — an explicit, separate decision from this spec's original "no microphone" stance, not a quiet reversal of it. The recorded clip follows the exact same discipline as camera frames: RAM only, never written to disk, discarded once transcribed. The mic itself is live only for one bounded window per `Open_Palm` trigger (end of the countdown to the stop condition) — never continuously, no wake word, no always-on audio pipeline. Verify `RECORD_AUDIO`'s presence in the *merged* manifest with the same discipline as the `INTERNET` check above; if this ever drifts toward anything resembling continuous listening, that needs its own explicit, separate decision, same as this one required.
+- **Generated text:** displayed, not logged. The banner shows the current line and nothing else persists. The voice trigger's transcript is held only in memory for the duration of that one exchange, same as everything else here.
+
+## 7. What This Version Retires
+Being explicit about this so nothing gets carried forward by habit:
+- Custom `CustomPainter` pixel-art rendering (body, glasses, eye sockets — all of it)
+- Continuous spring-driven gaze tracking and the eyelid-state/emotion-tag expression system
+- Rive entirely (already retired in v3, restated here for completeness)
+- The Lottie/pixel-icon asset-pack search — no external animation library needed at all now
+- The lap/total timer's ring-around-eye-socket and star-field visual encoding, specifically, because it was designed for a renderer that no longer exists. **The underlying `lapSeconds`/`totalSeconds` tracking and the persistence carve-out amendment can still stand if wanted, but the visual needs a fresh decision for the four-zone layout — not carried over as-is, and not redesigned here without your input.**
+
+## 8. Build Order
+1. Confirm the existing camera pipeline, `PetState` machine, and brightness/inference throttling still work as-is — this is the one piece that has survived every version unchanged and shouldn't need rebuilding.
+2. Four-zone layout: static scaffold, emoji zone (plain Unicode text) and banner zone (pixel font, scrolling if needed) with placeholder content, no LLM yet.
+3. Bundle the chosen model as an asset; wire up a single structured `{emoji, text}` call against a static test image to prove the pipeline end to end before touching triggers.
+4. Wire the four trigger events (`Waking`, periodic ambient tick, `Victory` gesture, `Open_Palm` voice) one at a time, each its own test cycle.
+5. Gesture detection (`Victory`/`Open_Palm`/`Closed_Fist`) as its own isolated stage — it's a separate on-device model from the Reaction Engine's, don't conflate testing the two.
+6. Fallback/default emoji paths (`Sleeping`, malformed output) — small but don't skip, they're what keeps the screen from ever going blank.
+7. Voice recording as its own isolated stage, same "prove it standalone before wiring it into the shared conversation flow" approach as gesture detection got: mic capture in isolation, then chunked transcription against a known clip, then only after both work on their own, the full record → transcribe → reply path.
+8. Soak test — same requirement as every prior version: this now includes confirming the bundled models (Gemma, gesture recognizer, and now the STT model) don't meaningfully worsen thermal or memory behavior over a multi-hour idle stretch when combined with the existing continuous camera/gesture pipelines.

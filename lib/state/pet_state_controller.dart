@@ -16,9 +16,17 @@ import 'pet_state.dart';
 /// ramps, inference-rate throttling — runs off an internal ticker so it
 /// keeps advancing even between frames.
 class PetStateController {
-  PetStateController({required this.setTargetFps});
+  PetStateController({required this.setTargetFps, this.onReturn});
 
   final void Function(double fps) setTargetFps;
+
+  /// Fired every time presence returns after being away — from Dimming or
+  /// Sleeping (via the full Waking ramp) *and* from a brief Idle blip
+  /// (direct back to Tracking, no ramp). Spec: "Waking... always fires" on
+  /// return from absence — that includes a return too brief to have ever
+  /// reached Dimming, which previously fell through with no callback at
+  /// all and left the Reaction Engine's last output stale on screen.
+  final void Function(double absenceSeconds)? onReturn;
 
   static const _tickInterval = Duration(milliseconds: 100);
   static const _tickSeconds = 0.1;
@@ -64,14 +72,20 @@ class PetStateController {
     _stablePresent = stable;
     if (!stable) return;
 
+    // Captured before the reset below — previously this reset ran first
+    // and every "wake (absence Xs)" log line and onReturn call read back
+    // the already-zeroed value, so the absence-scaled greeting was
+    // silently always fed 0 regardless of the real gap.
+    final absenceBeforeReturn = _absenceSeconds;
     _absenceSeconds = 0;
     switch (_state) {
       case PetState.dimming:
       case PetState.sleeping:
-        _transition(PetState.waking);
+        _transition(PetState.waking, absenceSeconds: absenceBeforeReturn);
         break;
       case PetState.idle:
         _transition(PetState.tracking);
+        onReturn?.call(absenceBeforeReturn);
         break;
       case PetState.tracking:
       case PetState.waking:
@@ -124,14 +138,15 @@ class PetStateController {
     _publishDebug();
   }
 
-  void _transition(PetState next) {
+  void _transition(PetState next, {double absenceSeconds = 0}) {
     if (next == _state) return;
     _state = next;
     _secondsInState = 0;
     setTargetFps(_targetFpsFor(next));
     if (next == PetState.waking) {
       _lapSeconds = 0;
-      _logAnim('wake (absence ${_absenceSeconds.toStringAsFixed(0)}s)');
+      _logAnim('wake (absence ${absenceSeconds.toStringAsFixed(0)}s)');
+      onReturn?.call(absenceSeconds);
     }
     _persistTotal();
   }

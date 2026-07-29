@@ -13,11 +13,20 @@ class FrameData {
   final int rotationDegrees; // tuned via the panel — front-cam rotation varies
   final DateTime capturedAt;
 
+  /// The plane's actual row stride, in bytes — NOT assumed to equal [width].
+  /// camera_android_camerax has been observed padding rows wider than the
+  /// image for memory alignment; feeding ML Kit a hardcoded `bytesPerRow:
+  /// width` when the real stride is larger silently misaligns every row
+  /// after the first, which is exactly the shape of bug that shows up native
+  /// -side as a null/out-of-bounds crash rather than a Dart exception.
+  final int bytesPerRow;
+
   FrameData({
     required this.bytes,
     required this.width,
     required this.height,
     required this.rotationDegrees,
+    required this.bytesPerRow,
     required this.capturedAt,
   });
 
@@ -25,12 +34,14 @@ class FrameData {
   /// `ImageFormatGroup.nv21`. The Android plugin delivers a single plane
   /// with the full NV21 buffer; we copy it and let the original go.
   factory FrameData.from(CameraImage image, int rotationDegrees) {
-    final bytes = Uint8List.fromList(image.planes.first.bytes);
+    final plane = image.planes.first;
+    final bytes = Uint8List.fromList(plane.bytes);
     return FrameData(
       bytes: bytes,
       width: image.width,
       height: image.height,
       rotationDegrees: rotationDegrees,
+      bytesPerRow: plane.bytesPerRow,
       capturedAt: DateTime.now(),
     );
   }
