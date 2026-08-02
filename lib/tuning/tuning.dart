@@ -139,6 +139,13 @@ class Tuning {
     // assumed.
     'conversation_window_s':
         TuningSpec('Conversation window s', 15, 600, 300, step: 15),
+    // How long an absence has to last before backFromBreak actually shows a
+    // greeting. Below this, onReturn still fires (lap timer etc. still
+    // reset as usual) but the reaction on screen is left alone — a glance
+    // away or briefly covering the face shouldn't read as "welcome back
+    // after a 16-second break".
+    'min_break_greeting_s':
+        TuningSpec('Min break for greeting s', 5, 600, 120, step: 5),
 
     // --- Voice recording (Open_Palm trigger, spec Section 4.4) ---
     // Hard cap on one recording window: Closed_Fist stops it early, this is
@@ -183,6 +190,7 @@ class Tuning {
     'gesture_debounce_frames': 2,
     'gesture_cooldown_s': 20,
     'conversation_window_s': 300,
+    'min_break_greeting_s': 120,
     'recording_max_duration_s': 30,
     'device_temp_warn_c': 42,
   };

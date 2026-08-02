@@ -268,7 +268,14 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
   /// Waking/ambient/gesture trio, but shares their busy-flag and phase
   /// indicator since it hits the same singleton model session.
   Future<void> _triggerTestReaction() async {
-    if (_engineBusy) return;
+    // Also gated on the voice flow being idle (spec Section 4.4's "known
+    // open issue" note): this button didn't check `_voicePhase`, so tapping
+    // it mid-countdown/recording/transcribing could take `_engineBusy` for
+    // itself and cause the voice trigger's own `_fireRealTrigger` call to
+    // silently no-op once recording stopped — the stage would then hand
+    // back to the normal view still showing whatever was on screen before
+    // the person spoke, looking exactly like the reply had been dropped.
+    if (_engineBusy || _voicePhase != VoiceRecordingPhase.idle) return;
     setState(() {
       _engineBusy = true;
       _phase = ReactionPhase.processing;
@@ -371,7 +378,14 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
   /// The old pre-fire-on-raw-signal optimization (starting the model call
   /// early to hide its latency) is gone along with the call it existed to
   /// hide — nothing left to pre-empt.
+  ///
+  /// Below `min_break_greeting_s`, this is a no-op: a glance away, or a
+  /// hand briefly covering the face, was showing up as "back after a
+  /// 16-second break" since `onReturn` used to fire — and greet — on
+  /// *any* return, no matter how short the gap. Short gaps still reset
+  /// the lap timer etc. via the controller; they just don't get a banner.
   void _onReturn(double absenceSeconds) {
+    if (absenceSeconds < Tuning.get('min_break_greeting_s')) return;
     setState(() {
       _reaction = Reaction.backFromBreak(
         name: Tuning.userName,
@@ -627,7 +641,21 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
       _pendingTranscript = trimmed;
     }
     DebugBus.instance.put('RecordingState', 'replying');
-    await _fireRealTrigger('voice', voiceTranscript: trimmed);
+    final fired = await _fireRealTrigger('voice', voiceTranscript: trimmed);
+    if (!fired) {
+      // The engine was busy or no camera frame was available at the exact
+      // moment the reply should have fired — without this, handing back to
+      // the normal view would silently show whatever reaction was on
+      // screen *before* the person spoke, which reads exactly like the
+      // reply got dropped (spec Section 4.4's "known open issue"). Show an
+      // honest fallback instead of pretending nothing happened.
+      DebugBus.instance.put('LastError', 'Voice reply dropped: engine busy or no frame');
+      if (mounted) {
+        setState(() => _reaction = Reaction.fallback);
+      } else {
+        _reaction = Reaction.fallback;
+      }
+    }
     if (mounted) {
       setState(() {
         _voicePhase = VoiceRecordingPhase.idle;
@@ -684,10 +712,18 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
   /// model can read, and call the Reaction Engine. Never touches disk —
   /// the JPEG only ever exists in memory, same lifetime as the NV21 frame
   /// it was built from (non-negotiable #2).
-  Future<void> _fireRealTrigger(String trigger, {String? voiceTranscript}) async {
-    if (_engineBusy) return;
+  ///
+  /// Returns whether a call actually fired. Ambient/gesture callers ignore
+  /// this — skipping quietly is fine there, there's already a reaction on
+  /// screen. The voice trigger cannot ignore it (spec Section 4.4's "known
+  /// open issue"): these same early-outs, hit right as a spoken exchange
+  /// was handing off from "replying" to the normal view, were one of the
+  /// ways the stage fell back to showing the pre-trigger reaction instead
+  /// of a reply to what was actually said.
+  Future<bool> _fireRealTrigger(String trigger, {String? voiceTranscript}) async {
+    if (_engineBusy) return false;
     final frame = _camera.latestFrame;
-    if (frame == null) return;
+    if (frame == null) return false;
     setState(() {
       _engineBusy = true;
       _phase = ReactionPhase.capturing;
@@ -751,7 +787,7 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
       final reaction = trigger == 'voice'
           ? Reaction(emoji: result.emoji, text: result.text, longForm: true)
           : result;
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _reaction = reaction);
       if (reaction.text.isNotEmpty) {
         _recentTexts.insert(0, reaction.text);
@@ -784,6 +820,7 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
         _armAmbientTimer(_conversationUntil!);
       }
       _flashSuccess();
+      return true;
     } finally {
       if (mounted) setState(() => _engineBusy = false);
     }
@@ -826,7 +863,9 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
       extraActions: [
         _DebugButton(
           label: _engineBusy ? 'RUNNING…' : 'TEST REACTION',
-          onTap: _engineBusy ? null : _triggerTestReaction,
+          onTap: (_engineBusy || _voicePhase != VoiceRecordingPhase.idle)
+              ? null
+              : _triggerTestReaction,
         ),
       ],
       child: Scaffold(
