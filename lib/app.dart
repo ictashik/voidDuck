@@ -918,10 +918,12 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
     );
   }
 
-  /// Small top-right `session_min / total_min` readout — the persisted
+  /// Small top-right `session_min / today_min` readout — the persisted
   /// lapSeconds/totalSeconds tracking (CLAUDE.md's persistence carve-out)
   /// still exists per spec Section 7; this is its plain-text replacement
-  /// for the retired ring/star-field visual.
+  /// for the retired ring/star-field visual. totalSeconds is a per-day
+  /// counter (device-local date), not all-time — the right-hand number
+  /// resets at midnight instead of climbing forever.
   Widget _minutesReadout() {
     return Positioned(
       top: 12,

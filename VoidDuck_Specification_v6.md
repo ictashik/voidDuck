@@ -65,6 +65,8 @@ Being explicit about this so nothing gets carried forward by habit:
 - The Lottie/pixel-icon asset-pack search — no external animation library needed at all now
 - The lap/total timer's ring-around-eye-socket and star-field visual encoding, specifically, because it was designed for a renderer that no longer exists. **The underlying `lapSeconds`/`totalSeconds` tracking and the persistence carve-out amendment can still stand if wanted, but the visual needs a fresh decision for the four-zone layout — not carried over as-is, and not redesigned here without your input.**
 
+`totalSeconds` was changed (explicit sign-off, v0.32) from an all-time running total to a per-device-local-day counter — it resets the first time it's touched after the date rolls over, including live if the device stays powered on through midnight, not just on the next restart. The `_sessionContext` prompt line and the debug overlay's "Total" row were updated to say "today" rather than "in total" to match.
+
 ## 8. Build Order
 1. Confirm the existing camera pipeline, `PetState` machine, and brightness/inference throttling still work as-is — this is the one piece that has survived every version unchanged and shouldn't need rebuilding.
 2. Four-zone layout: static scaffold, emoji zone (plain Unicode text) and banner zone (pixel font, scrolling if needed) with placeholder content, no LLM yet.

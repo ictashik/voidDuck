@@ -39,10 +39,14 @@ class PetStateController {
   Timer? _ticker;
 
   // Lap/total timers. lapSeconds resets on every Waking transition;
-  // totalSeconds is cumulative across the app's lifetime and persisted
-  // (CLAUDE.md's persistence carve-out, now three values).
+  // totalSeconds is cumulative for the current device-local calendar day
+  // (not all-time) and persisted (CLAUDE.md's persistence carve-out, now
+  // three values). _totalSecondsDay tracks which day that accumulation
+  // belongs to, so a device left running straight through midnight still
+  // rolls over live instead of only on the next restart.
   double _lapSeconds = 0;
   double _totalSeconds = 0;
+  DateTime _totalSecondsDay = DateTime.now();
   DateTime _lastPersistAt = DateTime.now();
   static const _persistInterval = Duration(seconds: 30);
 
@@ -55,6 +59,7 @@ class PetStateController {
 
   void start() {
     _totalSeconds = PetMemory.totalSeconds;
+    _totalSecondsDay = DateTime.now();
     setTargetFps(_targetFpsFor(_state));
     _publishDebug();
     _ticker = Timer.periodic(_tickInterval, (_) => _tick());
@@ -96,12 +101,22 @@ class PetStateController {
   void _tick() {
     _secondsInState += _tickSeconds;
 
+    final now = DateTime.now();
+    if (!_isSameDay(now, _totalSecondsDay)) {
+      // Device stayed on straight through midnight — re-zero the live
+      // counter immediately rather than waiting for the next restart to
+      // notice via PetMemory's own date check.
+      _totalSecondsDay = now;
+      _totalSeconds = 0;
+      _persistTotal();
+    }
+
     // lapSeconds/totalSeconds only accrue in the "present-ish" states.
     if (_state == PetState.tracking || _state == PetState.idle) {
       _lapSeconds += _tickSeconds;
       _totalSeconds += _tickSeconds;
     }
-    if (DateTime.now().difference(_lastPersistAt) >= _persistInterval) {
+    if (now.difference(_lastPersistAt) >= _persistInterval) {
       _persistTotal();
     }
 
@@ -155,6 +170,9 @@ class PetStateController {
     _lastPersistAt = DateTime.now();
     PetMemory.totalSeconds = _totalSeconds;
   }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   double _targetFpsFor(PetState s) {
     switch (s) {

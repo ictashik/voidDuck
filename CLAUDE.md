@@ -135,6 +135,8 @@ The aliveness layers from earlier versions (damped gaze, stare-break, idle breat
 
 Still exactly as constrained as before: last-seen-face timestamp, a mood scalar, and `totalSeconds` (added with explicit sign-off when the timer feature was introduced). The timer's *visual* representation (the old ring/star-field design) no longer fits the four-zone layout and needs a fresh decision — but the underlying data tracking is still permitted to exist. Don't invent a new visual for it without asking; that's an open item, not yours to resolve unilaterally. No other new persisted values without the same explicit sign-off.
 
+`totalSeconds` is a per-device-local-day counter, not all-time (explicit sign-off, requested directly) — it resets the first time it's touched after the date rolls over, whether that's a fresh app start on a new day or the app staying on straight through midnight. It carries a small internal date-stamp key alongside it purely to detect that rollover; that's bookkeeping for `totalSeconds` itself, not a fourth independently meaningful persisted value.
+
 ---
 
 ## Build order

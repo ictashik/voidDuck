@@ -92,8 +92,8 @@ class PromptContext {
     final lapMin = (lapSeconds / 60).round();
     final totalMin = (totalSeconds / 60).round();
     return "They've been at the desk for about $lapMin minute"
-        "${lapMin == 1 ? '' : 's'} this session; you've been running for "
-        'about $totalMin minute${totalMin == 1 ? '' : 's'} in total.';
+        "${lapMin == 1 ? '' : 's'} this session; $totalMin minute"
+        '${totalMin == 1 ? '' : 's'} at the desk so far today.';
   }
 
   static String _noRepeat(List<String> recentTexts) {

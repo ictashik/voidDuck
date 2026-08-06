@@ -180,7 +180,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
       ]),
       _section('Timers', [
         _row('Lap (HH:MM:SS)', 'LapSeconds'),
-        _row('Total (HH:MM:SS)', 'TotalSeconds'),
+        _row('Total today (HH:MM:SS)', 'TotalSeconds'),
       ]),
       _section('ML Kit (raw)', [
         _row('Face center', 'FaceCenter'),
