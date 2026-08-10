@@ -116,6 +116,17 @@ class Tuning {
         TuningSpec('Banner reveal chars/s', 2, 60, 18, step: 1),
     'banner_cursor_blink_ms':
         TuningSpec('Banner cursor blink ms', 100, 2000, 500, step: 50),
+    // CRT flipboard character (v0.15): 0 = plain typewriter exactly as
+    // before, 1 = max streaming drama. Scales the red stream-window size
+    // ahead of the lock wave, the settle flicker on lock, and the rare
+    // tears/ambient dims.
+    'banner_flicker_intensity':
+        TuningSpec('Banner flicker intensity', 0, 1, 0.7, step: 0.05),
+    // Probability (0..1) that a slot in the red streaming window shows a
+    // glitch block glyph instead of a letter/digit — the "bad signal" chaos
+    // of the flipboard.
+    'banner_glitch_probability':
+        TuningSpec('Banner ghost glyph prob', 0, 1, 0.15, step: 0.05),
 
     // --- Reaction Engine triggers (spec Section 4.1) ---
     'ambient_tick_interval_s':
@@ -184,6 +195,8 @@ class Tuning {
     'bright_ramp_rate': 1.5,
     'banner_reveal_chars_per_s': 18,
     'banner_cursor_blink_ms': 500,
+    'banner_flicker_intensity': 0.7,
+    'banner_glitch_probability': 0.15,
     'ambient_tick_interval_s': 120,
     'gesture_poll_interval_ms': 400,
     'gesture_confidence_threshold': 0.6,

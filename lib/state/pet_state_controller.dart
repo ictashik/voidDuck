@@ -56,6 +56,7 @@ class PetStateController {
   double get brightness => _brightness;
   double get lapSeconds => _lapSeconds;
   double get totalSeconds => _totalSeconds;
+  int get stateSeconds => _secondsInState.round();
 
   void start() {
     _totalSeconds = PetMemory.totalSeconds;

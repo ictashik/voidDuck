@@ -19,10 +19,12 @@ import 'state/pet_state.dart';
 import 'state/pet_state_controller.dart';
 import 'tuning/tuning.dart';
 import 'ui/ambient_countdown.dart';
+import 'ui/crt_overlay.dart';
 import 'ui/debug_overlay.dart';
 import 'ui/permission_gate.dart';
 import 'ui/reaction_status_indicator.dart';
 import 'ui/recording_indicator.dart';
+import 'ui/stage_theme.dart';
 import 'ui/typewriter_banner.dart';
 import 'ui/voice_countdown.dart';
 import 'vision/camera_service.dart';
@@ -48,7 +50,7 @@ class VoidDuckApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        scaffoldBackgroundColor: Colors.black,
+        scaffoldBackgroundColor: StageColors.crt,
         colorScheme: const ColorScheme.dark(
           primary: Colors.black,
           surface: Colors.black,
@@ -869,77 +871,82 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
         ),
       ],
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: StageColors.crt,
         body: Stack(
           children: [
             _body(),
-            _ambientCountdown(),
-            ReactionStatusIndicator(phase: _phase),
-            _minutesReadout(),
-            _tempReadout(),
+            // Stage chrome: terminal register strips at top and bottom
+            // (example.html's topbar/botbar, carrying the readouts that used
+            // to float as four separate corner widgets).
+            _topChrome(),
+            _bottomChrome(),
+            // CRT texture over everything but the debug overlay.
+            const CrtOverlay(),
           ],
         ),
       ),
     );
   }
 
-  /// Pixel-block countdown to the next ambient tick, just left of the
-  /// status dot. Hidden outside Tracking — ambient doesn't fire then, and
-  /// the away banner already covers that state. During an active gesture
-  /// conversation window the span this counts against has already been
-  /// stretched to match (see `_armAmbientTimer`), so the same bar honestly
-  /// reflects "ambient is on hold for the conversation" rather than
-  /// ticking toward a check that's about to get skipped anyway.
-  Widget _ambientCountdown() {
-    return AnimatedBuilder(
-      animation: DebugBus.instance,
-      builder: (context, _) {
-        final armedAt = _ambientArmedAt;
-        final nextAt = _ambientNextAt;
-        if (_petState.state != PetState.tracking ||
-            armedAt == null ||
-            nextAt == null) {
-          return const SizedBox.shrink();
-        }
-        final span = nextAt.difference(armedAt).inMilliseconds;
-        final elapsed = DateTime.now().difference(armedAt).inMilliseconds;
-        final progress = span > 0 ? elapsed / span : 1.0;
-        final conversing = _conversationUntil != null &&
-            DateTime.now().isBefore(_conversationUntil!);
-        return Positioned(
-          right: 34,
-          bottom: 18,
-          child: AmbientCountdown(
-            progress: progress,
-            conversationMode: conversing,
-          ),
-        );
-      },
-    );
-  }
-
-  /// Small top-right `session_min / today_min` readout — the persisted
-  /// lapSeconds/totalSeconds tracking (CLAUDE.md's persistence carve-out)
-  /// still exists per spec Section 7; this is its plain-text replacement
-  /// for the retired ring/star-field visual. totalSeconds is a per-day
-  /// counter (device-local date), not all-time — the right-hand number
-  /// resets at midnight instead of climbing forever.
-  Widget _minutesReadout() {
+  /// Top terminal strip: unit ID, live camera/voice status, PetState, and
+  /// the thermal + session readouts (which used to float top-left and
+  /// top-right).
+  Widget _topChrome() {
     return Positioned(
-      top: 12,
-      right: 16,
+      top: 0,
+      left: 0,
+      right: 0,
       child: AnimatedBuilder(
         animation: DebugBus.instance,
         builder: (context, _) {
-          final lapMin = (_petState.lapSeconds / 60).floor();
-          final totalMin = (_petState.totalSeconds / 60).floor();
-          return Text(
-            '$lapMin / $totalMin',
-            style: const TextStyle(
-              fontFamily: 'Silkscreen',
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: Color(0xFFFFFFFF),
+          final state = _petState.state;
+          final absent =
+              state != PetState.tracking && state != PetState.waking;
+          final tempC = _deviceTempC;
+          final hot = tempC != null &&
+              tempC >= Tuning.get('device_temp_warn_c');
+          return Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: const BoxDecoration(
+              color: StageColors.crt2,
+              border: Border(bottom: BorderSide(color: StageColors.rule)),
+            ),
+            child: Row(
+              children: [
+                const Text(
+                  '⬤',
+                  style: TextStyle(color: StageColors.hazard, fontSize: 8),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'VOIDDUCK',
+                  style: StageText.labelStrong.copyWith(letterSpacing: 0.2),
+                ),
+                const SizedBox(width: 8),
+                const Text('· DESK COMPANION', style: StageText.label),
+                const Spacer(),
+                _voiceChromeLabel(),
+                const SizedBox(width: 14),
+                if (state == PetState.sleeping)
+                  _BlinkText(
+                    text: 'STATE · SLEEPING',
+                    style: StageText.labelRed,
+                    blinkMs: 700,
+                  )
+                else
+                  Text(
+                    'STATE · ${_stateLabel(state)}',
+                    style: absent ? StageText.labelRed : StageText.labelStrong,
+                  ),
+                const Spacer(),
+                Text(
+                  'TEMP ${tempC == null ? '—' : '${tempC.toStringAsFixed(0)}°C'}',
+                  style: hot ? StageText.labelRed : StageText.label,
+                ),
+                const SizedBox(width: 14),
+                _sessionReadout(),
+              ],
             ),
           );
         },
@@ -947,28 +954,112 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
     );
   }
 
-  /// Top-left device-thermal readout: battery temperature as a permission-
-  /// free proxy for device thermal load (spec's soak-test concern, made
-  /// visible instead of only discoverable via a multi-hour manual test).
-  /// Dull/white normally, flips to red once at or above the tunable warn
-  /// threshold.
-  Widget _tempReadout() {
-    final tempC = _deviceTempC;
-    if (tempC == null) return const SizedBox.shrink();
-    final warnC = Tuning.get('device_temp_warn_c');
-    final hot = tempC >= warnC;
+  /// The voice-flow readout in the top strip: idle shows the camera as
+  /// live; the recording flow shows which stage it's in (red, blinking for
+  /// REC) — the terminal's "channel is in use" tell.
+  Widget _voiceChromeLabel() {
+    switch (_voicePhase) {
+      case VoiceRecordingPhase.countdown:
+        return Text('ARM · $_countdownValue', style: StageText.labelRed);
+      case VoiceRecordingPhase.recording:
+        return _BlinkText(
+          text: '● REC',
+          style: StageText.labelRed.copyWith(fontSize: 11),
+          blinkMs: 400,
+        );
+      case VoiceRecordingPhase.transcribing:
+        return const Text('STT', style: StageText.labelRed);
+      case VoiceRecordingPhase.replying:
+        return const Text('SYNTH', style: StageText.labelRed);
+      case VoiceRecordingPhase.idle:
+        return const Text('CAM ▮ LIVE', style: StageText.label);
+    }
+  }
+
+  /// `session_min / today_min` — the persisted lapSeconds/totalSeconds
+  /// tracking (CLAUDE.md's persistence carve-out), now in the top strip
+  /// instead of a floating corner label.
+  Widget _sessionReadout() {
+    final lapMin = (_petState.lapSeconds / 60).floor();
+    final totalMin = (_petState.totalSeconds / 60).floor();
+    return Text(
+      'SESS ${lapMin.toString().padLeft(2, '0')} · DAY ${totalMin.toString().padLeft(2, '0')}',
+      style: StageText.label,
+    );
+  }
+
+  String _stateLabel(PetState state) {
+    switch (state) {
+      case PetState.tracking:
+        return 'TRACKING';
+      case PetState.waking:
+        return 'WAKING';
+      case PetState.idle:
+        return 'IDLE';
+      case PetState.dimming:
+        return 'DIMMING';
+      case PetState.sleeping:
+        return 'SLEEPING';
+    }
+  }
+
+  /// Bottom terminal strip: build/serial info + state seconds on the left,
+  /// the ambient countdown and status square on the right (which used to
+  /// float bottom-right).
+  Widget _bottomChrome() {
     return Positioned(
-      top: 12,
-      left: 16,
-      child: Text(
-        '${tempC.toStringAsFixed(0)}°C',
-        style: TextStyle(
-          fontFamily: 'Silkscreen',
-          fontWeight: FontWeight.w700,
-          fontSize: 14,
-          color: hot ? const Color(0xFFFF3B30) : const Color(0x66FFFFFF),
-        ),
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: AnimatedBuilder(
+        animation: DebugBus.instance,
+        builder: (context, _) {
+          return Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: const BoxDecoration(
+              color: StageColors.crt2,
+              border: Border(top: BorderSide(color: StageColors.rule)),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  'BUILD v0.15 · IN STATE ${_petState.stateSeconds.toString().padLeft(3, '0')}s',
+                  style: StageText.label,
+                ),
+                const Spacer(),
+                _ambientCountdown(),
+                const SizedBox(width: 12),
+                ReactionStatusIndicator(phase: _phase),
+              ],
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  /// Block countdown to the next ambient tick, in the bottom strip just
+  /// left of the status square. Hidden outside Tracking — ambient doesn't
+  /// fire then, and the away banner already covers that state. During an
+  /// active gesture conversation window the span this counts against has
+  /// already been stretched to match (see `_armAmbientTimer`).
+  Widget _ambientCountdown() {
+    final armedAt = _ambientArmedAt;
+    final nextAt = _ambientNextAt;
+    if (_petState.state != PetState.tracking ||
+        armedAt == null ||
+        nextAt == null) {
+      return const SizedBox.shrink();
+    }
+    final span = nextAt.difference(armedAt).inMilliseconds;
+    final elapsed = DateTime.now().difference(armedAt).inMilliseconds;
+    final progress = span > 0 ? elapsed / span : 1.0;
+    final conversing = _conversationUntil != null &&
+        DateTime.now().isBefore(_conversationUntil!);
+    return AmbientCountdown(
+      progress: progress,
+      conversationMode: conversing,
     );
   }
 
@@ -995,15 +1086,17 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
           cap: Duration(seconds: capS.round()),
         );
       case VoiceRecordingPhase.transcribing:
-        return const Center(
-          child: Text(
-            'TRANSCRIBING…',
-            style: TextStyle(
-              fontFamily: 'Silkscreen',
+        // Terminal "STT running" readout — types itself with the same CRT
+        // reveal character as the banner, then holds with a blinking caret.
+        return Center(
+          child: TypewriterBanner(
+            text: 'TRANSCRIBING…',
+            style: const TextStyle(
+              fontFamily: StageText.mono,
               fontWeight: FontWeight.w700,
               fontSize: 22,
               letterSpacing: 2,
-              color: Color(0x99FFFFFF),
+              color: StageColors.phosSoft,
             ),
           ),
         );
@@ -1017,25 +1110,24 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '"${_pendingTranscript ?? ''}"',
-                  textAlign: TextAlign.center,
+                TypewriterBanner(
+                  text: '"${_pendingTranscript ?? ''}"',
                   style: const TextStyle(
-                    fontFamily: 'Silkscreen',
+                    fontFamily: StageText.mono,
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
-                    color: Color(0x99FFFFFF),
+                    color: StageColors.phosSoft,
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'THINKING…',
-                  style: TextStyle(
-                    fontFamily: 'Silkscreen',
+                TypewriterBanner(
+                  text: 'THINKING…',
+                  style: const TextStyle(
+                    fontFamily: StageText.mono,
                     fontWeight: FontWeight.w700,
                     fontSize: 22,
                     letterSpacing: 2,
-                    color: Color(0xFFFFFFFF),
+                    color: StageColors.phos,
                   ),
                 ),
               ],
@@ -1076,43 +1168,121 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
                     text: '${Tuning.userName.toUpperCase()} is away',
                   )
                 : _reaction;
-        return Row(
-          children: [
-            // Zone 1: the emoji.
-            Expanded(
-              flex: 1,
-              child: Center(
-                child: Text(
-                  shown.emoji,
-                  style: const TextStyle(fontSize: 96),
-                ),
-              ),
-            ),
-            // Zones 2-4: the pixel-font banner.
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: TypewriterBanner(
-                  text: shown.text,
-                  longForm: shown.longForm,
-                  // Color sampled from the "FABLE 5" marquee reference;
-                  // dialed back to ~85% alpha to stay subtle against the
-                  // pitch-black stage rather than reading as neon. Voice
-                  // replies run smaller — a ~100-word reply at the ambient
-                  // quip's 34px would mostly scroll past unread.
-                  style: TextStyle(
-                    fontFamily: 'Silkscreen',
-                    fontWeight: FontWeight.w700,
-                    fontSize: shown.longForm ? 22 : 34,
-                    color: const Color(0xD9CF5867),
+        return Padding(
+          padding: const EdgeInsets.only(top: 30, bottom: 30),
+          child: Row(
+            children: [
+              // Zone 1: the emoji, framed as the stage's specimen glyph
+              // (example.html `.ascii-frame` brackets).
+              Expanded(
+                flex: 1,
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        '[',
+                        style: TextStyle(
+                          fontFamily: StageText.mono,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: StageColors.hazard,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        shown.emoji,
+                        style: const TextStyle(fontSize: 88),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text(
+                        ']',
+                        style: TextStyle(
+                          fontFamily: StageText.mono,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: StageColors.hazard,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ],
+              // Zones 2-4: the banner. Away (Idle/Dimming) renders as a
+              // hazard alert box instead of a plain line — the stage's
+              // "operator absent" state; Sleeping shows emoji only.
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: away
+                      ? _awayAlertBox()
+                      : TypewriterBanner(
+                          text: shown.text,
+                          longForm: shown.longForm,
+                          style: TextStyle(
+                            fontFamily: StageText.mono,
+                            fontWeight: FontWeight.w700,
+                            fontSize: shown.longForm ? 22 : 34,
+                            color: StageColors.phos,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
         );
       },
+    );
+  }
+
+  /// Idle/Dimming banner: hazard-striped alert box with a red
+  /// `[ OPERATOR ABSENT ]` frame label — the stage's way of saying the
+  /// signal is gone, in the same register as example.html's alert slide.
+  Widget _awayAlertBox() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      decoration: BoxDecoration(
+        border: Border.all(color: StageColors.hazard),
+        borderRadius: BorderRadius.zero,
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(painter: _HazardStripePainter()),
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _BlinkText(
+                text: '[ OPERATOR ABSENT ]',
+                style: const TextStyle(
+                  fontFamily: StageText.mono,
+                  fontSize: 11,
+                  letterSpacing: 0.24,
+                  fontWeight: FontWeight.w700,
+                  color: StageColors.hazard,
+                ),
+                blinkMs: 700,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${Tuning.userName.toUpperCase()} IS AWAY',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: StageText.mono,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 26,
+                  letterSpacing: 1,
+                  color: StageColors.phos,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1131,7 +1301,7 @@ class _DebugButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           border: Border.all(color: const Color(0x44FFFFFF)),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.zero,
         ),
         child: Text(
           label,
@@ -1147,4 +1317,69 @@ class _DebugButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Hard-stepped blink (example.html `.blink`), for the few red state labels
+/// that are allowed to move on this stage: sleeping state, REC, and the
+/// away alert's frame label. Stepped, not eased — the aesthetic is
+/// mechanical.
+class _BlinkText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  final int blinkMs;
+
+  const _BlinkText({
+    required this.text,
+    required this.style,
+    this.blinkMs = 500,
+  });
+
+  @override
+  State<_BlinkText> createState() => _BlinkTextState();
+}
+
+class _BlinkTextState extends State<_BlinkText> {
+  Timer? _timer;
+  bool _on = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(Duration(milliseconds: widget.blinkMs), (_) {
+      setState(() => _on = !_on);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: _on ? 1.0 : 0.3,
+      child: Text(widget.text, style: widget.style),
+    );
+  }
+}
+
+/// Diagonal hazard stripes at low alpha — the alert-box fill from
+/// example.html's `repeating-linear-gradient(135deg, ...)`, drawn once
+/// (static, `shouldRepaint` false).
+class _HazardStripePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = StageColors.hazard.withValues(alpha: 0.08)
+      ..strokeWidth = 18;
+    final step = 36.0;
+    for (var x = -size.height; x < size.width + size.height; x += step) {
+      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 0), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HazardStripePainter oldDelegate) => false;
 }

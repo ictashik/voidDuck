@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../tuning/tuning.dart';
+import 'stage_theme.dart';
 
 /// Live tuning panel (CLAUDE.md "in-app tuning panel"). Every knob that
 /// affects feel is a slider here and persists across restarts via
@@ -53,7 +54,8 @@ class _TuningPanelState extends State<TuningPanel> {
             const Text(
               'TUNING',
               style: TextStyle(
-                color: Color(0xFFE0E0E0),
+                fontFamily: StageText.mono,
+                color: StageColors.phos,
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.2,
@@ -64,7 +66,14 @@ class _TuningPanelState extends State<TuningPanel> {
               onTap: _copyAll,
               child: const Padding(
                 padding: EdgeInsets.all(2),
-                child: Icon(Icons.copy, size: 12, color: Color(0xCCFFFFFF)),
+                child: Text(
+                  '[COPY]',
+                  style: TextStyle(
+                    fontFamily: StageText.mono,
+                    fontSize: 9,
+                    color: StageColors.phosSoft,
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -75,12 +84,19 @@ class _TuningPanelState extends State<TuningPanel> {
               },
               child: const Padding(
                 padding: EdgeInsets.all(2),
-                child: Icon(Icons.refresh, size: 12, color: Color(0xCCFFFFFF)),
+                child: Text(
+                  '[RESET]',
+                  style: TextStyle(
+                    fontFamily: StageText.mono,
+                    fontSize: 9,
+                    color: StageColors.hazard,
+                  ),
+                ),
               ),
             ),
           ],
         ),
-        const Divider(height: 6, color: Color(0x44FFFFFF)),
+        const Divider(height: 6, color: StageColors.rule),
         _sectionHeader('identity'),
         _nameField(),
         Flexible(
@@ -100,12 +116,7 @@ class _TuningPanelState extends State<TuningPanel> {
         padding: const EdgeInsets.only(top: 6, bottom: 2),
         child: Text(
           p.toUpperCase(),
-          style: const TextStyle(
-            color: Color(0x99FFFFFF),
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.0,
-          ),
+          style: StageText.section.copyWith(color: StageColors.hazard),
         ),
       );
 
@@ -118,20 +129,32 @@ class _TuningPanelState extends State<TuningPanel> {
             width: 110,
             child: Text(
               'Name',
-              style: TextStyle(color: Color(0xBBFFFFFF), fontSize: 9),
+              style: TextStyle(
+                fontFamily: StageText.mono,
+                color: StageColors.phosSoft,
+                fontSize: 9,
+              ),
             ),
           ),
           Expanded(
             child: TextField(
               controller: _nameController,
-              style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 11),
-              cursorColor: const Color(0xFFFFFFFF),
+              style: const TextStyle(
+                fontFamily: StageText.mono,
+                color: StageColors.phos,
+                fontSize: 11,
+              ),
+              cursorColor: StageColors.phos,
               decoration: const InputDecoration(
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-                border: OutlineInputBorder(),
+                contentPadding:
+                    EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
                 enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: Color(0x44FFFFFF)),
+                  borderRadius: BorderRadius.zero,
+                  borderSide: BorderSide(color: StageColors.ruleStrong),
                 ),
               ),
               onChanged: (v) => Tuning.userName = v,
@@ -153,7 +176,11 @@ class _TuningPanelState extends State<TuningPanel> {
             width: 110,
             child: Text(
               spec.label,
-              style: const TextStyle(color: Color(0xBBFFFFFF), fontSize: 9),
+              style: const TextStyle(
+                fontFamily: StageText.mono,
+                color: StageColors.phosSoft,
+                fontSize: 9,
+              ),
             ),
           ),
           Expanded(
@@ -164,6 +191,8 @@ class _TuningPanelState extends State<TuningPanel> {
                   ? null
                   : ((spec.max - spec.min) / spec.step!).round(),
               value: value.clamp(spec.min, spec.max),
+              activeColor: StageColors.phos,
+              inactiveColor: StageColors.phosMute.withValues(alpha: 0.4),
               onChanged: (v) {
                 Tuning.set(key, v);
                 setState(() {});
@@ -177,7 +206,8 @@ class _TuningPanelState extends State<TuningPanel> {
                   ? value.toStringAsFixed(0)
                   : value.toStringAsFixed(2),
               style: const TextStyle(
-                color: Color(0xFFFFFFFF),
+                fontFamily: StageText.mono,
+                color: StageColors.phos,
                 fontSize: 10,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),

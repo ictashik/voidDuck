@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../debug/debug_bus.dart';
+import 'stage_theme.dart';
 import 'tuning_panel.dart';
 
 /// Skeleton debug overlay required by every build (CLAUDE.md "Debug overlay").
@@ -42,7 +43,8 @@ class _DebugOverlayState extends State<DebugOverlay> {
   static const double _tapZone = 64.0;
   static const Duration _multiTapWindow = Duration(milliseconds: 500);
   static const TextStyle _kLabel = TextStyle(
-    color: Color(0xCCFFFFFF),
+    fontFamily: StageText.mono,
+    color: StageColors.phosSoft,
     fontSize: 10,
     height: 1.15,
     fontFeatures: [FontFeature.tabularFigures()],
@@ -96,9 +98,12 @@ class _DebugOverlayState extends State<DebugOverlay> {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxHeight: maxH),
         child: Material(
-          color: const Color(0x80000000),
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
+          color: StageColors.crt2.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.zero,
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: StageColors.ruleStrong),
+            ),
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -114,12 +119,19 @@ class _DebugOverlayState extends State<DebugOverlay> {
                       onTap: () => setState(() => _open = false),
                       child: const Padding(
                         padding: EdgeInsets.all(2),
-                        child: Icon(Icons.close, size: 12, color: Color(0xCCFFFFFF)),
+                        child: Text(
+                          '[X]',
+                          style: TextStyle(
+                            fontFamily: StageText.mono,
+                            fontSize: 10,
+                            color: StageColors.phosSoft,
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const Divider(height: 6, color: Color(0x44FFFFFF)),
+                const Divider(height: 6, color: StageColors.rule),
                 Flexible(
                   child: _tab == 0
                       ? AnimatedBuilder(
@@ -136,7 +148,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
                                     children: widget.extraActions,
                                   ),
                                   const Divider(
-                                      height: 10, color: Color(0x44FFFFFF)),
+                                      height: 10, color: StageColors.rule),
                                 ],
                                 ..._sections(),
                               ],
@@ -160,7 +172,8 @@ class _DebugOverlayState extends State<DebugOverlay> {
       child: Text(
         label,
         style: TextStyle(
-          color: active ? const Color(0xFFFFFFFF) : const Color(0x66FFFFFF),
+          fontFamily: StageText.mono,
+          color: active ? StageColors.phos : StageColors.phosMute,
           fontSize: 10,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.2,
@@ -238,12 +251,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
         children: [
           Text(
             title.toUpperCase(),
-            style: const TextStyle(
-              color: Color(0x99FFFFFF),
-              fontSize: 9,
-              letterSpacing: 1.0,
-              fontWeight: FontWeight.w600,
-            ),
+            style: StageText.section.copyWith(color: StageColors.hazard),
           ),
           ...rows,
         ],
@@ -261,7 +269,7 @@ class _DebugOverlayState extends State<DebugOverlay> {
             TextSpan(text: '$label: ', style: _kLabel),
             TextSpan(
               text: v == null ? '—' : v.toString(),
-              style: _kLabel.copyWith(color: const Color(0xFFFFFFFF)),
+              style: _kLabel.copyWith(color: StageColors.phos),
             ),
           ],
         ),

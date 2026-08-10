@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'stage_theme.dart';
+
 /// Full-stage "mic is live" view for a voice-recording window (spec Section
-/// 4.4) — a pulsing red dot plus elapsed/cap seconds, deliberately large and
-/// centered rather than a corner badge, so it's obvious to anyone nearby
-/// that the mic is live right now, not continuously.
+/// 4.4) — a blinking hazard-red square plus elapsed/cap seconds, deliberately
+/// large and centered rather than a corner badge, so it's obvious to anyone
+/// nearby that the mic is live right now, not continuously.
+///
+/// v0.14 restyle: the old glowing circle is gone — a hard 90° red square
+/// blinks in stepped on/off fashion (the CRT terminal's "REC" tell), with a
+/// frame label under it. No glow, no curves (SKILL geometry rules).
 class RecordingIndicator extends StatefulWidget {
   final Duration elapsed;
   final Duration cap;
@@ -20,20 +26,21 @@ class RecordingIndicator extends StatefulWidget {
 
 class _RecordingIndicatorState extends State<RecordingIndicator>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
+  late final AnimationController _blink;
 
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(
+    // Stepped blink: square toggles between red and dark red.
+    _blink = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 600),
     )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _blink.dispose();
     super.dispose();
   }
 
@@ -44,47 +51,37 @@ class _RecordingIndicatorState extends State<RecordingIndicator>
         mainAxisSize: MainAxisSize.min,
         children: [
           AnimatedBuilder(
-            animation: _pulse,
+            animation: _blink,
             builder: (context, _) => Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color.lerp(
-                  const Color(0xFF7A1F2B),
-                  const Color(0xFFFF3B30),
-                  _pulse.value,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFF3B30)
-                        .withValues(alpha: 0.5 * _pulse.value),
-                    blurRadius: 16,
-                    spreadRadius: 4,
-                  ),
-                ],
+              width: 30,
+              height: 30,
+              color: Color.lerp(
+                StageColors.hazard,
+                StageColors.hazard.withValues(alpha: 0.35),
+                _blink.value,
               ),
             ),
           ),
           const SizedBox(height: 14),
           const Text(
-            'LISTENING',
+            'REC · LISTENING',
             style: TextStyle(
-              fontFamily: 'Silkscreen',
+              fontFamily: StageText.mono,
               fontWeight: FontWeight.w700,
               fontSize: 22,
               letterSpacing: 2,
-              color: Color(0xFFFFFFFF),
+              color: StageColors.hazard,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             '${widget.elapsed.inSeconds}s / ${widget.cap.inSeconds}s',
             style: const TextStyle(
-              fontFamily: 'Silkscreen',
+              fontFamily: StageText.mono,
               fontWeight: FontWeight.w700,
               fontSize: 14,
-              color: Color(0x99FFFFFF),
+              letterSpacing: 1,
+              color: StageColors.phosSoft,
             ),
           ),
         ],

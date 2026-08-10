@@ -126,11 +126,14 @@ flutter:
     - assets/models/moonshine_tiny_5s_f32.tflite
     - assets/models/moonshine_tokenizer.json
 
-  # Banner typeface (spec Section 3): bundled directly from its OFL source
-  # rather than via the google_fonts package, which fetches over the network
-  # on first use — incompatible with non-negotiable #1 (no INTERNET, ever).
+  # Stage typeface (SKILL.md "Tactical Telemetry" taste, per the example.html
+  # deck): JetBrains Mono dominates the stage — banner, chrome bars, flow
+  # screens, panels. Bundled directly from its OFL source rather than via the
+  # google_fonts package, which fetches over the network on first use —
+  # incompatible with non-negotiable #1 (no INTERNET, ever).
   fonts:
-    - family: Silkscreen
+    - family: JetBrainsMono
       fonts:
-        - asset: assets/fonts/Silkscreen-Bold.ttf
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
           weight: 700
