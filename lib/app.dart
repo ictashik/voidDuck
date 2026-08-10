@@ -166,6 +166,18 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
   Timer? _tempTimer;
   double? _deviceTempC;
 
+  // Visitor alert (v0.16): a second face enters the frame while the owner
+  // is being tracked. Debounced over consecutive multi-face frames, then a
+  // cooldown so a sustained visitor doesn't re-trigger every poll. On fire:
+  // a 'visitor' Reaction Engine call ("who is that?") plus a full-screen
+  // red/white attention blink (the VisitorAlert widget). Gated on
+  // PetState.tracking so a passing crowd in an empty room doesn't set it
+  // off — the alert means "someone else is HERE, right now, while you are
+  // here too."
+  int _visitorStreak = 0;
+  DateTime? _visitorCooldownUntil;
+  bool _visitorAlertActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -241,6 +253,7 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
       _petState.start();
       _sub = _tracker.snapshots.listen((s) {
         _petState.onFacePresence(s.stableFacePresent);
+        _onFaceSnapshot(s);
         // Face left frame mid-recording/countdown: reset cleanly rather
         // than leaving the flow stuck waiting on a Closed_Fist that may
         // never come back into view (spec Section 4.4).
@@ -307,6 +320,64 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
       }
     } finally {
       if (mounted) setState(() => _engineBusy = false);
+    }
+  }
+
+  /// Visitor detection, per face snapshot (v0.16): count consecutive frames
+  /// with 2+ faces while the owner is stably present and the stage is
+  /// Tracking, then fire the visitor trigger + attention blink. Every other
+  /// condition (cooldown, engine busy, voice flow live) resets the streak —
+  /// the debounce only counts a clean, unopposed multi-face stretch.
+  void _onFaceSnapshot(FaceSnapshot s) {
+    final now = DateTime.now();
+    final cooling = _visitorCooldownUntil != null &&
+        now.isBefore(_visitorCooldownUntil!);
+    final armed = s.stableFacePresent &&
+        s.faceCount >= 2 &&
+        _petState.state == PetState.tracking &&
+        !cooling &&
+        !_engineBusy &&
+        _voicePhase == VoiceRecordingPhase.idle;
+    if (armed) {
+      _visitorStreak++;
+      if (_visitorStreak >= Tuning.get('visitor_debounce_frames').round()) {
+        _visitorStreak = 0;
+        _armVisitorCooldown();
+        unawaited(_fireVisitorAlert());
+      }
+    } else {
+      _visitorStreak = 0;
+    }
+    _publishVisitorState(now);
+  }
+
+  void _armVisitorCooldown() {
+    _visitorCooldownUntil = DateTime.now().add(
+      Duration(seconds: Tuning.get('visitor_cooldown_s').round()),
+    );
+    _publishVisitorState(DateTime.now());
+  }
+
+  /// The visitor attention-blink itself (no Reaction Engine involvement —
+  /// that's `_fireRealTrigger('visitor')`'s job): flip the stage's alert
+  /// overlay on; VisitorAlert self-turns off after its blinks elapse. The
+  /// blink runs even if the engine call ends up skipped (busy/no frame) —
+  /// the alert is about the moment, the reaction is about the content.
+  Future<void> _fireVisitorAlert() async {
+    if (!mounted) return;
+    setState(() => _visitorAlertActive = true);
+    await _fireRealTrigger('visitor');
+  }
+
+  void _publishVisitorState(DateTime now) {
+    final cooling = _visitorCooldownUntil;
+    if (cooling != null && now.isBefore(cooling)) {
+      DebugBus.instance.put('VisitorState',
+          'cooldown ${cooling.difference(now).inSeconds}s');
+    } else if (_visitorStreak > 0) {
+      DebugBus.instance.put('VisitorState', 'counting $_visitorStreak');
+    } else {
+      DebugBus.instance.put('VisitorState', 'armed');
     }
   }
 
@@ -757,6 +828,12 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
             transcript: voiceTranscript ?? '',
             conversationHistory: _conversationHistory,
           ),
+        'visitor' => PromptContext.forVisitor(
+            name: name,
+            lapSeconds: lapSeconds,
+            totalSeconds: totalSeconds,
+            recentTexts: _recentTexts,
+          ),
         _ => PromptContext.forAmbient(
             name: name,
             lapSeconds: lapSeconds,
@@ -783,6 +860,7 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
         maxOutputTokens: switch (trigger) {
           'gesture' => 90,
           'voice' => 320,
+          'visitor' => 90,
           _ => 200,
         },
       );
@@ -882,6 +960,16 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
             _bottomChrome(),
             // CRT texture over everything but the debug overlay.
             const CrtOverlay(),
+            // Visitor attention blink (v0.16): full-screen red/white flashes,
+            // above the CRT texture, below the debug overlay. Self-dismissing.
+            if (_visitorAlertActive)
+              VisitorAlert(
+                blinks: Tuning.get('visitor_alert_blinks').round(),
+                blinkMs: Tuning.get('visitor_alert_blink_ms').round(),
+                onDone: () {
+                  if (mounted) setState(() => _visitorAlertActive = false);
+                },
+              ),
           ],
         ),
       ),
@@ -1024,7 +1112,7 @@ class _StageState extends State<_Stage> with WidgetsBindingObserver {
             child: Row(
               children: [
                 Text(
-                  'BUILD v0.15 · IN STATE ${_petState.stateSeconds.toString().padLeft(3, '0')}s',
+                  'BUILD v0.16 · IN STATE ${_petState.stateSeconds.toString().padLeft(3, '0')}s',
                   style: StageText.label,
                 ),
                 const Spacer(),
@@ -1382,4 +1470,65 @@ class _HazardStripePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HazardStripePainter oldDelegate) => false;
+}
+
+/// The visitor attention blink (v0.16): full-screen hazard-red / phosphor-
+/// white alternating flashes, purely mechanical (stepped, no easing — the
+/// stage's motion rules). Alternates `blinks * 2` phases at `blinkMs` each,
+/// then calls [onDone] so the stage can clear the active flag. Sits above
+/// the CRT texture but below the debug overlay, and eats no pointer events.
+class VisitorAlert extends StatefulWidget {
+  final int blinks;
+  final int blinkMs;
+  final VoidCallback onDone;
+
+  const VisitorAlert({
+    super.key,
+    required this.blinks,
+    required this.blinkMs,
+    required this.onDone,
+  });
+
+  @override
+  State<VisitorAlert> createState() => _VisitorAlertState();
+}
+
+class _VisitorAlertState extends State<VisitorAlert> {
+  Timer? _timer;
+  int _phase = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final total = widget.blinks * 2;
+    _timer = Timer.periodic(Duration(milliseconds: widget.blinkMs), (t) {
+      _phase++;
+      if (_phase >= total) {
+        t.cancel();
+        widget.onDone();
+        return;
+      }
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final red = _phase.isEven;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: ColoredBox(
+          color: red
+              ? StageColors.hazard.withValues(alpha: 0.85)
+              : StageColors.phos.withValues(alpha: 0.5),
+        ),
+      ),
+    );
+  }
 }

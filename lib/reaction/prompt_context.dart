@@ -48,6 +48,10 @@ class PromptContext {
         return 'You were invoked because an automatic hand-gesture '
             'detector saw a deliberate Victory (peace-sign) gesture aimed '
             'at the camera, held steady for about a second.';
+      case 'visitor':
+        return 'You were invoked because the camera saw a SECOND person '
+            'enter the frame while your person was still there — you are '
+            'not alone on the desk anymore.';
       case 'ambient':
       default:
         return 'You were invoked by a periodic timer that fires every so '
@@ -210,6 +214,33 @@ class PromptContext {
         'actually talking with them right now. This reply can be longer '
         'than your usual one-liner — a real, substantive answer, up to '
         'about 100 words, not just a quip.';
+  }
+
+  /// Framing for the `visitor` trigger (v0.16): the camera saw a second
+  /// face enter while the owner was still present, and the stage is blinking
+  /// red/white to get their attention. The reaction should read as "who is
+  /// that?" — wary curiosity aimed at the owner, not a greeting to the
+  /// newcomer, and not a description of the scene. Same last-position
+  /// disambiguation principle as [forGesture]: the "don't describe, ask"
+  /// instruction is the last thing before the tool-call instruction.
+  static String forVisitor({
+    required String name,
+    required double lapSeconds,
+    required double totalSeconds,
+    required List<String> recentTexts,
+  }) {
+    return '$_persona\n\n${_triggerExplainer('visitor')} ${_nameLine(name)}'
+        '\n\n${_circadianMood()} ${_sessionContext(lapSeconds: lapSeconds, totalSeconds: totalSeconds)}'
+        '${_noRepeat(recentTexts)}'
+        '\n\nA stranger is in the room. Your person is still there too, '
+        'most likely working. Say a short, sharp line that reads as '
+        '"wait, who is that?" — startled curiosity or mock-alarm aimed at '
+        'your person, possibly asking them to explain, possibly sizing up '
+        'the newcomer. Do not greet the newcomer warmly, do not describe '
+        'the scene, do not say hello. One line, under 60 characters. If '
+        'the stranger is holding up something with actual writing on it, '
+        'read it and answer it directly instead — but the line should '
+        'still acknowledge there is an unfamiliar presence.';
   }
 
   /// Framing for the periodic ambient tick during `Tracking`.

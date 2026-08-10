@@ -30,6 +30,11 @@ class FaceSnapshot {
   final int width;
   final int height;
 
+  /// How many faces ML Kit found on this frame. The selected face (largest
+  /// bbox) drives everything else; a count of 2+ is what the visitor alert
+  /// keys on — someone else entered the frame while the owner is present.
+  final int faceCount;
+
   // Raw bbox center in ML Kit image coords (post-rotation applied by ML Kit).
   final double rawCenterX;
   final double rawCenterY;
@@ -52,6 +57,7 @@ class FaceSnapshot {
     required this.rawCenterY,
     required this.rawBoxW,
     required this.rawBoxH,
+    this.faceCount = 0,
   });
 
   static FaceSnapshot empty(int width, int height) => FaceSnapshot(
@@ -87,6 +93,7 @@ class FaceSnapshot {
         rawCenterY: rawCenterY,
         rawBoxW: rawBoxW,
         rawBoxH: rawBoxH,
+        faceCount: faceCount,
       );
 }
 
@@ -234,6 +241,7 @@ class FaceTracker {
       rawCenterY: cy,
       rawBoxW: b.width,
       rawBoxH: b.height,
+      faceCount: faces.length,
     );
   }
 
@@ -241,6 +249,7 @@ class FaceTracker {
     final bus = DebugBus.instance;
     bus.put('FaceLock',
         '${s.stableFacePresent ? "locked" : "searching"} (raw ${s.facePresent ? "yes" : "no"}, streak ${s.facePresent ? _presentStreak : _absentStreak})');
+    bus.put('FaceCount', '${s.faceCount}');
     if (s.facePresent) {
       bus.put('FaceCenter',
           '(${s.rawCenterX.round()}, ${s.rawCenterY.round()})');

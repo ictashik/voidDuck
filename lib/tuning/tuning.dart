@@ -166,6 +166,21 @@ class Tuning {
     'recording_max_duration_s':
         TuningSpec('Recording max duration s', 5, 60, 30, step: 5),
 
+    // --- Visitor alert (v0.16: second person enters frame while owner is
+    // present — reaction + full-screen red/white blink) ---
+    // Consecutive multi-face frames before the visitor trigger fires.
+    'visitor_debounce_frames':
+        TuningSpec('Visitor debounce frames', 1, 15, 4, step: 1),
+    // Min gap between visitor alerts, so one sustained visitor doesn't
+    // re-trigger the blink every couple of seconds.
+    'visitor_cooldown_s':
+        TuningSpec('Visitor cooldown s', 10, 600, 60, step: 5),
+    // Full-screen attention blink: red/white alternations and phase length.
+    'visitor_alert_blinks':
+        TuningSpec('Visitor alert blinks', 1, 12, 5, step: 1),
+    'visitor_alert_blink_ms':
+        TuningSpec('Visitor blink phase ms', 60, 600, 160, step: 20),
+
     // --- Device thermal readout (top-left corner) ---
     'device_temp_warn_c':
         TuningSpec('Temp warn threshold C', 30, 60, 42, step: 1),
@@ -205,6 +220,10 @@ class Tuning {
     'conversation_window_s': 300,
     'min_break_greeting_s': 120,
     'recording_max_duration_s': 30,
+    'visitor_debounce_frames': 4,
+    'visitor_cooldown_s': 60,
+    'visitor_alert_blinks': 5,
+    'visitor_alert_blink_ms': 160,
     'device_temp_warn_c': 42,
   };
 }

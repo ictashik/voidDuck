@@ -198,10 +198,14 @@ class _DebugOverlayState extends State<DebugOverlay> {
       _section('ML Kit (raw)', [
         _row('Face center', 'FaceCenter'),
         _row('Face size', 'FaceSize'),
+        _row('Face count', 'FaceCount'),
         _row('Head euler Z', 'HeadEulerZ'),
         _row('Smiling prob', 'SmilingProb'),
         _row('Left eye open', 'LeftEyeOpen'),
         _row('Right eye open', 'RightEyeOpen'),
+      ]),
+      _section('Visitor', [
+        _row('Visitor state', 'VisitorState'),
       ]),
       _section('Gaze', [
         _row('LookX smooth / raw', 'LookX'),
