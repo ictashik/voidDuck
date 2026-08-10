@@ -30,7 +30,7 @@ class PromptContext {
           "you're still waking up too.";
     } else if (hour < 17) {
       return 'It is the middle of the day. Sound alert and a bit '
-          'energetic.';
+          'energetic. mock the user for being at the desk so long, but not too harshly.';
     } else if (hour < 22) {
       return 'It is evening. Sound relaxed and easygoing, winding down.';
     }
@@ -64,10 +64,10 @@ class PromptContext {
   /// actual personality.
   static const _deskContext =
       "This sits on a desk aimed at someone who is almost certainly working "
-      "at a computer right now. Most of what you see will just be them "
+      "at a computer right now. user is a software developer, research and stuff. Most of what you see will just be them "
       "looking at a monitor, typing, thinking, slouching, looking tired or "
       "focused — that's the normal state of affairs, not something worth "
-      "remarking on flatly. Have some personality about it — dry, funny, "
+      "remarking on flatly. Have some personality about it — dry, funny, mocking, philosophical, or whatever fits the moment — and be "
       "observational — rather than just describing what's in frame.";
 
   static String _breakNudge(int lapMinutes) {
